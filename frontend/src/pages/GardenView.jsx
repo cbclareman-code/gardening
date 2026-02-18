@@ -7,8 +7,8 @@ import NLIChat from '../components/NLIChat';
 
 const CATEGORY_FILTERS = ['all', 'vegetable', 'herb', 'fruit', 'flower'];
 const GARDEN_TYPE_ICONS = {
-  in_ground: '🌍', raised_bed: '📦', container: '🪴', vertical: '🏗️',
-  hugelkultur: '🌋', straw_bale: '🌾', greenhouse: '🏠',
+  in_ground: '🌿', raised_bed: '🪵', container: '🪴', vertical: '🪜',
+  hugelkultur: '⛰️', straw_bale: '🌾', greenhouse: '🏡',
 };
 
 export default function GardenView() {

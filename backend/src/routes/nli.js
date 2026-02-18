@@ -13,7 +13,7 @@ const anthropic = new Anthropic({
 
 function buildSystemPrompt(garden, plants) {
   const plantList = plants.map(p =>
-    `- ${p.name} (${p.emoji}) at position (${p.x_position.toFixed(1)}, ${p.y_position.toFixed(1)}), qty: ${p.quantity}`
+    `- ${p.name} (${p.emoji}) qty: ${p.quantity}`
   ).join('\n');
 
   return `You are ChatGRD, an expert garden planning assistant. You help users plan, optimize, and manage their gardens through natural conversation.

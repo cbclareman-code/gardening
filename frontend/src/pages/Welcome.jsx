@@ -1,7 +1,18 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import useAuthStore from '../store/authStore';
+import NLIChat from '../components/NLIChat';
 
 export default function Welcome() {
+  const { user, logout } = useAuthStore();
+  const navigate = useNavigate();
+  const [chatOpen, setChatOpen] = useState(false);
+
+  const handleLogout = () => {
+    logout();
+    navigate('/');
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-garden-50 via-white to-emerald-50 flex flex-col">
       {/* Header */}
@@ -10,9 +21,19 @@ export default function Welcome() {
           <span className="text-3xl">🌱</span>
           <span>ChatGRD</span>
         </div>
-        <div className="flex gap-3">
-          <Link to="/login" className="btn-secondary text-sm py-1.5 px-3">Sign in</Link>
-          <Link to="/register" className="btn-primary text-sm py-1.5 px-3">Get started</Link>
+        <div className="flex gap-3 items-center">
+          {user ? (
+            <>
+              <span className="text-sm text-gray-500 hidden sm:block">Hi, {user.username} 👋</span>
+              <Link to="/dashboard" className="btn-primary text-sm py-1.5 px-3">My Gardens</Link>
+              <button onClick={handleLogout} className="text-sm text-gray-500 hover:text-gray-700">Sign out</button>
+            </>
+          ) : (
+            <>
+              <Link to="/login" className="btn-secondary text-sm py-1.5 px-3">Sign in</Link>
+              <Link to="/register" className="btn-primary text-sm py-1.5 px-3">Get started</Link>
+            </>
+          )}
         </div>
       </header>
 
@@ -29,25 +50,44 @@ export default function Welcome() {
         </p>
 
         <div className="flex flex-col sm:flex-row gap-4 mb-12">
-          <Link
-            to="/register"
-            className="btn-primary text-base py-3 px-8 rounded-xl"
-          >
-            Start with the Wizard
-          </Link>
-          <Link
-            to="/register"
-            className="btn-secondary text-base py-3 px-8 rounded-xl"
-          >
-            Use Chat (NLI)
-          </Link>
+          {user ? (
+            <>
+              <Link
+                to="/garden/new"
+                className="btn-primary text-base py-3 px-8 rounded-xl"
+              >
+                + New Garden (Wizard)
+              </Link>
+              <button
+                onClick={() => setChatOpen(true)}
+                className="btn-secondary text-base py-3 px-8 rounded-xl"
+              >
+                💬 Chat with AI (NLI)
+              </button>
+            </>
+          ) : (
+            <>
+              <Link
+                to="/register"
+                className="btn-primary text-base py-3 px-8 rounded-xl"
+              >
+                Start with the Wizard
+              </Link>
+              <Link
+                to="/register"
+                className="btn-secondary text-base py-3 px-8 rounded-xl"
+              >
+                Use Chat (NLI)
+              </Link>
+            </>
+          )}
         </div>
 
         {/* Feature cards */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-3xl w-full">
           {[
             { emoji: '📍', title: 'Zone-smart', desc: 'Get plant recommendations tailored to your hardiness zone and climate.' },
-            { emoji: '🗺️', title: 'Visual layouts', desc: 'See your garden plan come to life with drag-and-drop visual layouts.' },
+            { emoji: '🗺️', title: 'Visual layouts', desc: 'See your garden plan come to life with a clear visual layout.' },
             { emoji: '💬', title: 'AI chat', desc: '"Add strawberries" — just type it and your plan updates instantly.' },
           ].map((f) => (
             <div key={f.title} className="card p-5 text-left">
@@ -62,6 +102,16 @@ export default function Welcome() {
       <footer className="text-center py-6 text-sm text-gray-400">
         Built for new and suburban gardeners everywhere 🌍
       </footer>
+
+      {/* NLI Chat (only shown when logged in) */}
+      {user && (
+        <NLIChat
+          gardenId={null}
+          onGardenUpdate={null}
+          isOpen={chatOpen}
+          onToggle={() => setChatOpen(prev => !prev)}
+        />
+      )}
     </div>
   );
 }

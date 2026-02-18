@@ -12,8 +12,8 @@ router.post('/register', async (req, res) => {
   try {
     const { username, email, password } = req.body;
 
-    if (!username || !password) {
-      return res.status(400).json({ error: 'Username and password are required' });
+    if (!username || !password || !email) {
+      return res.status(400).json({ error: 'Username, email, and password are required' });
     }
     if (username.length < 3) {
       return res.status(400).json({ error: 'Username must be at least 3 characters' });
@@ -27,18 +27,16 @@ router.post('/register', async (req, res) => {
       return res.status(409).json({ error: 'Username already taken' });
     }
 
-    if (email) {
-      const existingEmail = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
-      if (existingEmail) {
-        return res.status(409).json({ error: 'Email already in use' });
-      }
+    const existingEmail = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+    if (existingEmail) {
+      return res.status(409).json({ error: 'Email already in use' });
     }
 
     const password_hash = await bcrypt.hash(password, 12);
     const id = uuidv4();
 
     db.prepare('INSERT INTO users (id, username, email, password_hash) VALUES (?, ?, ?, ?)')
-      .run(id, username, email || null, password_hash);
+      .run(id, username, email, password_hash);
 
     const token = jwt.sign({ id, username }, JWT_SECRET, { expiresIn: '30d' });
     res.status(201).json({ token, user: { id, username, email } });

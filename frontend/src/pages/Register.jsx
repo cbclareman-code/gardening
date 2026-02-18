@@ -13,6 +13,10 @@ export default function Register() {
     clearError();
     setLocalError('');
 
+    if (!form.email.trim()) {
+      setLocalError('Email is required');
+      return;
+    }
     if (form.password !== form.confirm) {
       setLocalError('Passwords do not match');
       return;
@@ -22,7 +26,7 @@ export default function Register() {
       return;
     }
 
-    const ok = await register(form.username, form.email || undefined, form.password);
+    const ok = await register(form.username, form.email.trim(), form.password);
     if (ok) navigate('/dashboard');
   };
 
@@ -60,13 +64,14 @@ export default function Register() {
             </div>
 
             <div>
-              <label className="label">Email <span className="text-gray-400 font-normal">(optional)</span></label>
+              <label className="label">Email <span className="text-red-500">*</span></label>
               <input
                 type="email"
                 className="input"
                 value={form.email}
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
                 placeholder="sarah@example.com"
+                required
               />
             </div>
 

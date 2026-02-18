@@ -14,10 +14,10 @@ function isCompanion(nameA, nameB) {
   return (COMPANION_PAIRS[nameA]?.includes(nameB)) || (COMPANION_PAIRS[nameB]?.includes(nameA));
 }
 
+// Single-bed sequential layout
 function generateLayout(plants, widthFt, lengthFt) {
   if (!plants || plants.length === 0) return [];
   const cols = Math.max(Math.floor(widthFt || 8), 1);
-  const rows = Math.max(Math.floor(lengthFt || 4), 1);
 
   const placed = [];
   let col = 0, row = 0;
@@ -31,15 +31,71 @@ function generateLayout(plants, widthFt, lengthFt) {
   return placed;
 }
 
+// Multi-bed layout: distribute plants across beds in order
+function generateMultiBedLayout(plants, beds) {
+  if (!plants || plants.length === 0 || !beds || beds.length === 0) return [];
+
+  const placed = [];
+  let bedIdx = 0;
+  let col = 0;
+  let row = 0;
+
+  for (const gp of plants) {
+    const sqFt = Math.max(1, Math.round((gp.spacing_inches || 12) / 12));
+
+    // Try to fit in current bed
+    let bed = beds[Math.min(bedIdx, beds.length - 1)];
+    const bedCols = Math.max(Math.floor(bed.width), 1);
+    const bedRows = Math.max(Math.floor(bed.length), 1);
+
+    // Move to next row if needed
+    if (col + sqFt > bedCols) {
+      col = 0;
+      row += 1;
+    }
+    // Move to next bed if current bed is full
+    if (row >= bedRows && bedIdx < beds.length - 1) {
+      bedIdx += 1;
+      col = 0;
+      row = 0;
+      bed = beds[bedIdx];
+    }
+
+    placed.push({
+      ...gp,
+      col: bed.x + col,
+      row: bed.y + row,
+      sqFt,
+      bedId: bed.id,
+    });
+    col += sqFt;
+  }
+  return placed;
+}
+
 export default function GardenLayout({ garden, plants, onPlantRemove }) {
   const canvasRef = useRef();
   const containerRef = useRef();
   const [hoveredPlant, setHoveredPlant] = useState(null);
   const [scale, setScale] = useState(1);
 
-  const widthFt = garden?.width_ft || 8;
-  const lengthFt = garden?.length_ft || 4;
-  const placed = generateLayout(plants, widthFt, lengthFt);
+  // Parse bed config from layout_data
+  const bedConfig = (() => {
+    if (garden?.layout_data) {
+      try { return JSON.parse(garden.layout_data); } catch { return null; }
+    }
+    return null;
+  })();
+
+  const hasBeds = bedConfig?.beds?.length > 1;
+  const beds = bedConfig?.beds || null;
+
+  const widthFt = hasBeds ? bedConfig.total_width : (garden?.width_ft || 8);
+  const lengthFt = hasBeds ? bedConfig.total_length : (garden?.length_ft || 4);
+
+  const placed = hasBeds
+    ? generateMultiBedLayout(plants, beds)
+    : generateLayout(plants, widthFt, lengthFt);
 
   const canvasWidth = widthFt * CELL_SIZE;
   const canvasHeight = lengthFt * CELL_SIZE;
@@ -67,24 +123,69 @@ export default function GardenLayout({ garden, plants, onPlantRemove }) {
     canvas.width = w;
     canvas.height = h;
 
-    // Background — soil color
-    ctx.fillStyle = '#92400e18';
-    ctx.fillRect(0, 0, w, h);
+    if (hasBeds && beds) {
+      // Multi-bed: draw path background first, then individual beds
+      ctx.fillStyle = '#d6b49630'; // path/walkway color
+      ctx.fillRect(0, 0, w, h);
 
-    // Grid lines
-    ctx.strokeStyle = '#d6b89620';
-    ctx.lineWidth = 1;
-    for (let c = 0; c <= widthFt; c++) {
-      ctx.beginPath();
-      ctx.moveTo(c * CELL_SIZE, 0);
-      ctx.lineTo(c * CELL_SIZE, h);
-      ctx.stroke();
-    }
-    for (let r = 0; r <= lengthFt; r++) {
-      ctx.beginPath();
-      ctx.moveTo(0, r * CELL_SIZE);
-      ctx.lineTo(w, r * CELL_SIZE);
-      ctx.stroke();
+      // Draw each bed
+      for (const bed of beds) {
+        const bx = bed.x * CELL_SIZE;
+        const by = bed.y * CELL_SIZE;
+        const bw = bed.width * CELL_SIZE;
+        const bh = bed.length * CELL_SIZE;
+
+        // Bed soil background
+        ctx.fillStyle = '#92400e18';
+        ctx.fillRect(bx, by, bw, bh);
+
+        // Bed border
+        ctx.strokeStyle = '#78350f60';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(bx, by, bw, bh);
+
+        // Grid lines within bed
+        ctx.strokeStyle = '#d6b89615';
+        ctx.lineWidth = 1;
+        for (let c = 0; c <= bed.width; c++) {
+          ctx.beginPath();
+          ctx.moveTo(bx + c * CELL_SIZE, by);
+          ctx.lineTo(bx + c * CELL_SIZE, by + bh);
+          ctx.stroke();
+        }
+        for (let r = 0; r <= bed.length; r++) {
+          ctx.beginPath();
+          ctx.moveTo(bx, by + r * CELL_SIZE);
+          ctx.lineTo(bx + bw, by + r * CELL_SIZE);
+          ctx.stroke();
+        }
+
+        // Bed label
+        ctx.font = 'bold 10px system-ui';
+        ctx.fillStyle = '#78350f90';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+        ctx.fillText(bed.label, bx + 4, by + 4);
+      }
+    } else {
+      // Single bed: original background + grid
+      ctx.fillStyle = '#92400e18';
+      ctx.fillRect(0, 0, w, h);
+
+      ctx.strokeStyle = '#d6b89620';
+      ctx.lineWidth = 1;
+      for (let c = 0; c <= widthFt; c++) {
+        ctx.beginPath();
+        ctx.moveTo(c * CELL_SIZE, 0);
+        ctx.lineTo(c * CELL_SIZE, h);
+        ctx.stroke();
+      }
+      for (let r = 0; r <= lengthFt; r++) {
+        ctx.beginPath();
+        ctx.moveTo(0, r * CELL_SIZE);
+        ctx.lineTo(w, r * CELL_SIZE);
+        ctx.stroke();
+      }
     }
 
     // Draw companion lines
@@ -140,7 +241,7 @@ export default function GardenLayout({ garden, plants, onPlantRemove }) {
         ctx.fillText(label, cx, y + CELL_SIZE - 13);
       }
     }
-  }, [placed, widthFt, lengthFt, hoveredPlant]);
+  }, [placed, widthFt, lengthFt, beds, hasBeds, hoveredPlant]);
 
   const handleCanvasClick = useCallback((e) => {
     const rect = canvasRef.current.getBoundingClientRect();
@@ -166,7 +267,9 @@ export default function GardenLayout({ garden, plants, onPlantRemove }) {
     <div className="space-y-4">
       <div className="flex items-center justify-between text-sm">
         <div className="text-gray-600">
-          📐 {widthFt} × {lengthFt} ft · {plants.length} plant varieties
+          {hasBeds
+            ? `📐 ${beds.length} beds · ${widthFt} × ${lengthFt} ft total · ${plants.length} plant varieties`
+            : `📐 ${widthFt} × ${lengthFt} ft · ${plants.length} plant varieties`}
         </div>
         <div className="flex items-center gap-3 text-xs text-gray-500">
           <span className="flex items-center gap-1">
@@ -175,6 +278,16 @@ export default function GardenLayout({ garden, plants, onPlantRemove }) {
           </span>
         </div>
       </div>
+
+      {hasBeds && (
+        <div className="flex flex-wrap gap-2 text-xs text-amber-700">
+          {beds.map(bed => (
+            <span key={bed.id} className="bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
+              {bed.label}: {bed.width} × {bed.length} ft
+            </span>
+          ))}
+        </div>
+      )}
 
       <div ref={containerRef} className="overflow-x-auto rounded-xl border border-gray-200 bg-amber-50/30">
         <div style={{ transform: `scale(${scale})`, transformOrigin: 'top left', width: canvasWidth * scale, height: canvasHeight * scale }}>
@@ -223,6 +336,9 @@ export default function GardenLayout({ garden, plants, onPlantRemove }) {
               <div className="flex gap-3 mt-2 text-xs text-gray-500">
                 <span>⏱ {hoveredPlant.days_to_maturity}d to harvest</span>
                 <span>📏 {hoveredPlant.spacing_inches}" spacing</span>
+                {hoveredPlant.bedId && hasBeds && (
+                  <span>📍 {beds.find(b => b.id === hoveredPlant.bedId)?.label}</span>
+                )}
               </div>
             </div>
             <button

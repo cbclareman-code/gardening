@@ -26,7 +26,7 @@ export default function App() {
     <div className="min-h-screen bg-gray-50">
       {user && <Navbar />}
       <Routes>
-        <Route path="/" element={<PublicRoute><Welcome /></PublicRoute>} />
+        <Route path="/" element={<Welcome />} />
         <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
         <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
         <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />

@@ -2,15 +2,16 @@ import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import useAuthStore from '../store/authStore';
+import NLIChat from '../components/NLIChat';
 
 const GARDEN_TYPE_ICONS = {
-  in_ground: '🌍',
-  raised_bed: '📦',
+  in_ground: '🌿',
+  raised_bed: '🪵',
   container: '🪴',
-  vertical: '🏗️',
-  hugelkultur: '🌋',
+  vertical: '🪜',
+  hugelkultur: '⛰️',
   straw_bale: '🌾',
-  greenhouse: '🏠',
+  greenhouse: '🏡',
 };
 
 export default function Dashboard() {
@@ -18,6 +19,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [gardens, setGardens] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [chatOpen, setChatOpen] = useState(false);
 
   useEffect(() => {
     api.get('/gardens')
@@ -121,6 +123,14 @@ export default function Dashboard() {
           ))}
         </div>
       )}
+
+      {/* NLI Chat floating assistant */}
+      <NLIChat
+        gardenId={null}
+        onGardenUpdate={null}
+        isOpen={chatOpen}
+        onToggle={() => setChatOpen(prev => !prev)}
+      />
     </div>
   );
 }

@@ -77,7 +77,7 @@ router.post('/', upload.single('photo'), (req, res) => {
   try {
     const {
       name, garden_type, location_city, location_state, hardiness_zone,
-      width_ft, length_ft, sun_exposure, has_fencing, irrigation_type, notes
+      width_ft, length_ft, sun_exposure, has_fencing, irrigation_type, notes, layout_data
     } = req.body;
 
     if (!name || !garden_type) {
@@ -90,12 +90,12 @@ router.post('/', upload.single('photo'), (req, res) => {
     db.prepare(`
       INSERT INTO gardens (id, user_id, name, garden_type, location_city, location_state,
         hardiness_zone, width_ft, length_ft, sun_exposure, has_fencing, irrigation_type,
-        notes, photo_path)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        notes, photo_path, layout_data)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(id, req.user.id, name, garden_type, location_city || null, location_state || null,
       hardiness_zone || null, parseFloat(width_ft) || null, parseFloat(length_ft) || null,
       sun_exposure || 'full_sun', has_fencing === 'true' ? 1 : 0,
-      irrigation_type || 'hand', notes || null, photo_path);
+      irrigation_type || 'hand', notes || null, photo_path, layout_data || null);
 
     const garden = db.prepare('SELECT * FROM gardens WHERE id = ?').get(id);
     res.status(201).json({ garden });
