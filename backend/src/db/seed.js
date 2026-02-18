@@ -267,12 +267,10 @@ const insertPlant = db.prepare(`
    @antagonists, @description, @planting_tips, @height_inches, @color)
 `);
 
-const insertMany = db.transaction((plants) => {
-  for (const plant of plants) {
-    insertPlant.run(plant);
-  }
-});
-
-insertMany(plants);
+db.exec('BEGIN');
+for (const plant of plants) {
+  insertPlant.run(plant);
+}
+db.exec('COMMIT');
 console.log(`✅ Seeded ${plants.length} plants into database`);
 process.exit(0);
