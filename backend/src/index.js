@@ -5,10 +5,11 @@ const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const isProd = process.env.NODE_ENV === 'production';
 
 // Middleware
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: isProd ? false : (process.env.FRONTEND_URL || 'http://localhost:5173'),
   credentials: true
 }));
 app.use(express.json({ limit: '10mb' }));
@@ -27,6 +28,15 @@ app.use('/api/nli', require('./routes/nli'));
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
+
+// Serve React frontend in production
+if (isProd) {
+  const distPath = path.join(__dirname, '../../frontend/dist');
+  app.use(express.static(distPath));
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(distPath, 'index.html'));
+  });
+}
 
 // Error handler
 app.use((err, req, res, next) => {

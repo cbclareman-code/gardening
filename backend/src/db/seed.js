@@ -255,9 +255,15 @@ const plants = [
   }
 ];
 
-// Clear existing plant data and reinsert
+// Only seed if plants table is empty
+const existing = db.prepare('SELECT COUNT(*) as count FROM plants').get();
+if (existing.count > 0) {
+  console.log(`✅ Plants already seeded (${existing.count} plants in database)`);
+  process.exit(0);
+}
+
 const insertPlant = db.prepare(`
-  INSERT OR REPLACE INTO plants
+  INSERT INTO plants
   (id, name, scientific_name, category, emoji, min_zone, max_zone, spacing_inches,
    days_to_maturity, sun_requirement, water_needs, garden_types, companions,
    antagonists, description, planting_tips, height_inches, color)
