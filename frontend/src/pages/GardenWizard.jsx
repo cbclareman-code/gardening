@@ -254,6 +254,38 @@ export default function GardenWizard() {
     }
   };
 
+  // Remove a unit from an area and keep type_selections in sync
+  const removeUnit = (areaIdx, unitToRemove) => {
+    setForm(f => {
+      const areas = [...f.areas];
+      const area = areas[areaIdx];
+
+      // Decrement quantity for this type (remove selection entirely if it hits 0)
+      const newTypeSelections = area.type_selections.map(s =>
+        s.type_id === unitToRemove.type_id ? { ...s, quantity: s.quantity - 1 } : s
+      ).filter(s => s.quantity > 0);
+
+      // Remove unit and re-number IDs + labels
+      const remaining = area.units.filter(u => u.id !== unitToRemove.id);
+      const typeCounters = {};
+      const relabeled = remaining.map((u, idx) => {
+        typeCounters[u.type_id] = (typeCounters[u.type_id] || 0) + 1;
+        const typeInfo = GARDEN_TYPES.find(t => t.id === u.type_id);
+        const countOfType = newTypeSelections.find(s => s.type_id === u.type_id)?.quantity ?? 0;
+        return {
+          ...u,
+          id: idx + 1,
+          label: countOfType > 1
+            ? `${typeInfo?.label} ${typeCounters[u.type_id]}`
+            : (typeInfo?.label || u.type_id),
+        };
+      });
+
+      areas[areaIdx] = { ...area, units: relabeled, type_selections: newTypeSelections };
+      return { ...f, areas };
+    });
+  };
+
   // ── area-count change ──────────────────────────────────────────────────────
   const handleNumAreasChange = n => {
     const count = Math.max(1, Math.min(6, n));
@@ -713,12 +745,22 @@ export default function GardenWizard() {
                           <span className="text-lg">{typeInfo?.emoji}</span>
                           <span className="font-semibold text-sm" style={{ color: c.text }}>{unit.label}</span>
                           {sqft && (
-                            <span className="ml-auto text-xs font-medium" style={{ color: c.text }}>
+                            <span className="text-xs font-medium" style={{ color: c.text }}>
                               📐 {sqft} sq ft
                             </span>
                           )}
                           {isReadonly && (
-                            <span className="ml-auto text-xs text-gray-400">mirrors unit 1</span>
+                            <span className="text-xs text-gray-400">mirrors unit 1</span>
+                          )}
+                          {currentArea.units.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removeUnit(areaIndex, unit)}
+                              className="ml-auto w-6 h-6 rounded-full flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors flex-shrink-0"
+                              title="Remove this unit"
+                            >
+                              ✕
+                            </button>
                           )}
                         </div>
                         <div className="grid grid-cols-2 gap-3">
