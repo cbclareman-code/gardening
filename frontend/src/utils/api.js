@@ -34,7 +34,7 @@ export function getZoneFromCity(city, state) {
   // Basic US zone lookup by state — for a real app, use a ZIP/geolocation API
   const stateZones = {
     AK: 1, MN: 4, ND: 3, SD: 4, ME: 4, WI: 4, VT: 4, NH: 5,
-    MT: 4, ID: 5, WY: 4, MI: 5, NY: 5, MA: 6, CT: 6, RI: 6,
+    MT: 4, ID: 5, WY: 4, MI: 5, NY: 5, MA: 6, CT: 7, RI: 6,
     OR: 7, WA: 7, CO: 5, NE: 5, IA: 5, PA: 6, NJ: 6, OH: 5,
     IN: 5, IL: 5, MO: 6, KY: 6, VA: 7, MD: 7, DE: 7, WV: 6,
     CA: 9, NV: 7, UT: 6, KS: 6, OK: 7, AR: 7, TN: 7, NC: 7,

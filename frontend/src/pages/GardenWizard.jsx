@@ -4,13 +4,13 @@ import api from '../utils/api';
 import { getZoneFromCity, getZoneLabel } from '../utils/api';
 
 const GARDEN_TYPES = [
-  { id: 'in_ground', emoji: '🌿', label: 'In-Ground', desc: 'Traditional garden dug into native soil — rows or beds' },
-  { id: 'raised_bed', emoji: '🪵', label: 'Raised Bed', desc: 'Wooden or brick frames filled with premium soil mix' },
+  { id: 'in_ground', emoji: '🌱', label: 'In-Ground', desc: 'Traditional garden dug into native soil — rows or beds' },
+  { id: 'raised_bed', emoji: '📦', label: 'Raised Bed', desc: 'Wooden or brick frames filled with premium soil mix' },
   { id: 'container', emoji: '🪴', label: 'Container', desc: 'Pots, planters, and barrels — great for patios' },
-  { id: 'vertical', emoji: '🪜', label: 'Vertical', desc: 'Walls, trellises, and tower systems for small spaces' },
-  { id: 'hugelkultur', emoji: '⛰️', label: 'Hügelkultur', desc: 'Mounded beds over buried logs for moisture retention' },
+  { id: 'vertical', emoji: '🧱', label: 'Vertical', desc: 'Walls, trellises, and tower systems for small spaces' },
+  { id: 'hugelkultur', emoji: '🏔️', label: 'Hügelkultur', desc: 'Mounded beds over buried logs for moisture retention' },
   { id: 'straw_bale', emoji: '🌾', label: 'Straw Bale', desc: 'Conditioned straw bales as self-contained grow beds' },
-  { id: 'greenhouse', emoji: '🏡', label: 'Greenhouse', desc: 'Climate-controlled growing space for year-round gardening' },
+  { id: 'greenhouse', emoji: '🫙', label: 'Greenhouse', desc: 'Climate-controlled growing space for year-round gardening' },
 ];
 
 const SUN_OPTIONS = [
@@ -169,6 +169,7 @@ export default function GardenWizard() {
     bed_width_ft: 4,
     bed_length_ft: 8,
     path_width_ft: 3,
+    dimensions_notes: '',
   });
 
   const update = (key, val) => setForm(f => ({ ...f, [key]: val }));
@@ -512,6 +513,17 @@ export default function GardenWizard() {
                 ))}
               </div>
             </div>
+
+            <div>
+              <label className="label">Dimension notes (optional)</label>
+              <textarea
+                className="input resize-none"
+                rows={2}
+                value={form.dimensions_notes}
+                onChange={(e) => update('dimensions_notes', e.target.value)}
+                placeholder="e.g. East side gets an extra hour of morning sun..."
+              />
+            </div>
           </div>
         )}
 
@@ -572,6 +584,17 @@ export default function GardenWizard() {
                 ))}
               </div>
             </div>
+
+            <div>
+              <label className="label">Dimension notes (optional)</label>
+              <textarea
+                className="input resize-none"
+                rows={2}
+                value={form.dimensions_notes}
+                onChange={(e) => update('dimensions_notes', e.target.value)}
+                placeholder="e.g. East side gets an extra hour of morning sun..."
+              />
+            </div>
           </div>
         )}
 
@@ -600,20 +623,32 @@ export default function GardenWizard() {
               </div>
             </div>
 
-            <label className={`flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${
-              form.has_fencing ? 'border-garden-500 bg-garden-50' : 'border-gray-200'
-            }`}>
-              <input
-                type="checkbox"
-                checked={form.has_fencing}
-                onChange={(e) => update('has_fencing', e.target.checked)}
-                className="w-4 h-4 accent-garden-600"
-              />
-              <div>
-                <div className="font-medium text-sm">🦌 Wildlife / fencing protection</div>
-                <div className="text-xs text-gray-500">Does your garden need deer, rabbit, or pest fencing?</div>
+            <div>
+              <label className="label">🦌 Wildlife / fencing protection</label>
+              <p className="text-xs text-gray-500 mb-2">Do you have deer, rabbit, or pest fencing?</p>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => update('has_fencing', true)}
+                  className={`p-3 rounded-xl border-2 flex items-center justify-center gap-2 transition-all ${
+                    form.has_fencing === true
+                      ? 'border-garden-500 bg-garden-50'
+                      : 'border-gray-200 hover:border-garden-300'
+                  }`}
+                >
+                  <span className="text-sm font-medium">Yes</span>
+                </button>
+                <button
+                  onClick={() => update('has_fencing', false)}
+                  className={`p-3 rounded-xl border-2 flex items-center justify-center gap-2 transition-all ${
+                    form.has_fencing === false
+                      ? 'border-garden-500 bg-garden-50'
+                      : 'border-gray-200 hover:border-garden-300'
+                  }`}
+                >
+                  <span className="text-sm font-medium">No</span>
+                </button>
               </div>
-            </label>
+            </div>
 
             <div>
               <label className="label">Notes (optional)</label>
