@@ -1,6 +1,18 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 
 const CELL_SIZE = 48; // pixels per foot
+
+// Same color scheme as GardenWizard builder
+const TYPE_COLORS = {
+  raised_bed:   { bg: '#fef3c7', border: '#d97706', text: '#92400e' },
+  in_ground:    { bg: '#dcfce7', border: '#16a34a', text: '#14532d' },
+  container:    { bg: '#dbeafe', border: '#2563eb', text: '#1e3a8a' },
+  vertical:     { bg: '#f3e8ff', border: '#9333ea', text: '#581c87' },
+  hugelkultur:  { bg: '#fce7f3', border: '#db2777', text: '#831843' },
+  straw_bale:   { bg: '#fff7ed', border: '#ea580c', text: '#7c2d12' },
+  greenhouse:   { bg: '#f0fdf4', border: '#15803d', text: '#052e16' },
+};
+const BUILDER_SCALE = 14; // px per foot, matches wizard builder
 const COMPANION_PAIRS = {
   'Tomato': ['Basil', 'Marigold', 'Carrot'],
   'Basil': ['Tomato', 'Pepper'],
@@ -73,25 +85,176 @@ function generateMultiBedLayout(plants, beds) {
   return placed;
 }
 
-export default function GardenLayout({ garden, plants, onPlantRemove }) {
-  const canvasRef = useRef();
+// Builder-familiar layout: renders garden units as colored boxes (v2 layout_data)
+function UnitBasedLayout({ units, plants, onPlantRemove }) {
   const containerRef = useRef();
-  const [hoveredPlant, setHoveredPlant] = useState(null);
   const [scale, setScale] = useState(1);
 
-  // Parse bed config from layout_data
-  const bedConfig = (() => {
+  // Compute bounding box from unit pixel positions
+  const maxRight  = Math.max(...units.map(u => (u.x ?? 12) + Math.max((parseFloat(u.width_ft)  || 3) * BUILDER_SCALE, 38)), 200);
+  const maxBottom = Math.max(...units.map(u => (u.y ?? 12) + Math.max((parseFloat(u.length_ft) || 3) * BUILDER_SCALE, 26)), 160);
+  const canvasW = maxRight  + 20;
+  const canvasH = maxBottom + 20;
+
+  // Scale to fit container
+  useEffect(() => {
+    if (containerRef.current) {
+      const cw = containerRef.current.clientWidth;
+      setScale(cw < canvasW ? cw / canvasW : 1);
+    }
+  }, [canvasW]);
+
+  // Distribute plants evenly across units
+  const plantsByUnit = {};
+  units.forEach(u => { plantsByUnit[u.id] = []; });
+  plants.forEach((p, i) => {
+    const u = units[i % units.length];
+    if (u) plantsByUnit[u.id].push(p);
+  });
+
+  return (
+    <div className="space-y-4">
+      <div className="text-sm text-gray-500">
+        📐 {units.length} unit{units.length !== 1 ? 's' : ''} · {plants.length} plant variet{plants.length !== 1 ? 'ies' : 'y'}
+        <span className="ml-3 text-xs text-gray-400">This is your garden as you designed it</span>
+      </div>
+
+      <div ref={containerRef} className="overflow-x-auto rounded-xl border border-gray-200 bg-gray-50">
+        <div
+          className="relative select-none"
+          style={{ width: canvasW * scale, height: canvasH * scale, minHeight: 120 }}
+        >
+          {/* Grid background */}
+          <svg
+            className="absolute inset-0 pointer-events-none"
+            width={canvasW * scale}
+            height={canvasH * scale}
+          >
+            <defs>
+              <pattern id="layout-grid" width={7 * 2 * scale} height={7 * 2 * scale} patternUnits="userSpaceOnUse">
+                <path
+                  d={`M ${7 * 2 * scale} 0 L 0 0 0 ${7 * 2 * scale}`}
+                  fill="none" stroke="#e5e7eb" strokeWidth="0.5"
+                />
+              </pattern>
+            </defs>
+            <rect width={canvasW * scale} height={canvasH * scale} fill="url(#layout-grid)" />
+          </svg>
+
+          {units.map(u => {
+            const x = (u.x ?? 12) * scale;
+            const y = (u.y ?? 12) * scale;
+            const w = Math.max((parseFloat(u.width_ft)  || 3) * BUILDER_SCALE, 38) * scale;
+            const h = Math.max((parseFloat(u.length_ft) || 3) * BUILDER_SCALE, 26) * scale;
+            const c = TYPE_COLORS[u.type_id] || TYPE_COLORS.in_ground;
+            const unitPlants = plantsByUnit[u.id] || [];
+            return (
+              <div
+                key={u.id}
+                className="absolute rounded-lg border-2 overflow-hidden"
+                style={{ left: x, top: y, width: w, height: h, backgroundColor: c.bg, borderColor: c.border }}
+              >
+                <div
+                  className="text-xs font-bold px-1.5 pt-1 leading-tight truncate"
+                  style={{ color: c.text, fontSize: Math.max(9, 11 * scale) }}
+                >
+                  {u.label}
+                </div>
+                {unitPlants.length > 0 && (
+                  <div className="flex flex-wrap gap-0.5 px-1.5 pt-0.5">
+                    {unitPlants.map(p => (
+                      <span
+                        key={p.id}
+                        title={p.name}
+                        style={{ fontSize: Math.max(12, 16 * scale) }}
+                        className="leading-none cursor-default"
+                      >
+                        {p.emoji}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Plant legend with remove */}
+      {plants.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {plants.map(p => (
+            <div
+              key={p.id}
+              className="flex items-center gap-1.5 text-xs bg-white border border-gray-200 rounded-full px-2.5 py-1 group"
+            >
+              <span>{p.emoji}</span>
+              <span className="text-gray-700">{p.name}</span>
+              {onPlantRemove && (
+                <button
+                  onClick={() => onPlantRemove(p)}
+                  className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 ml-0.5 transition-opacity"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Wrapper: routes to the right layout renderer based on layout_data version
+export default function GardenLayout({ garden, plants, onPlantRemove }) {
+  const layoutConfig = (() => {
     if (garden?.layout_data) {
       try { return JSON.parse(garden.layout_data); } catch { return null; }
     }
     return null;
   })();
 
-  const hasBeds = bedConfig?.beds?.length > 1;
-  const beds = bedConfig?.beds || null;
+  if (layoutConfig?.version === 2 && layoutConfig?.units?.length > 0) {
+    if (!plants || plants.length === 0) {
+      return (
+        <div className="flex flex-col items-center justify-center py-16 text-gray-400">
+          <div className="text-5xl mb-3">🌾</div>
+          <p className="font-medium">No plants yet</p>
+          <p className="text-sm mt-1">Add plants from the Plants tab to see them placed in your garden</p>
+        </div>
+      );
+    }
+    return (
+      <UnitBasedLayout
+        units={layoutConfig.units}
+        plants={plants}
+        onPlantRemove={onPlantRemove}
+      />
+    );
+  }
 
-  const widthFt = hasBeds ? bedConfig.total_width : (garden?.width_ft || 8);
-  const lengthFt = hasBeds ? bedConfig.total_length : (garden?.length_ft || 4);
+  return <CanvasGardenLayout garden={garden} plants={plants} onPlantRemove={onPlantRemove} />;
+}
+
+function CanvasGardenLayout({ garden, plants, onPlantRemove }) {
+  const canvasRef = useRef();
+  const containerRef = useRef();
+  const [hoveredPlant, setHoveredPlant] = useState(null);
+  const [scale, setScale] = useState(1);
+
+  const layoutConfig = (() => {
+    if (garden?.layout_data) {
+      try { return JSON.parse(garden.layout_data); } catch { return null; }
+    }
+    return null;
+  })();
+
+  const hasBeds = layoutConfig?.beds?.length > 1;
+  const beds = layoutConfig?.beds || null;
+
+  const widthFt = hasBeds ? layoutConfig.total_width : (garden?.width_ft || 8);
+  const lengthFt = hasBeds ? layoutConfig.total_length : (garden?.length_ft || 4);
 
   const placed = hasBeds
     ? generateMultiBedLayout(plants, beds)

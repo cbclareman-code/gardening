@@ -114,19 +114,27 @@ export default function GardenView() {
         </div>
       )}
 
+      {/* Breadcrumb */}
+      <div className="flex items-center gap-2 text-sm text-gray-400 mb-4">
+        <Link to="/dashboard" className="hover:text-gray-600 transition-colors">My Gardens</Link>
+        <span>/</span>
+        <span className="text-gray-700 font-medium truncate">{garden.name}</span>
+      </div>
+
       {/* Garden Header */}
-      <div className="flex items-start gap-4 mb-6">
+      <div className="flex items-start gap-4 mb-6 bg-garden-50 border border-garden-100 rounded-2xl p-4">
         {garden.photo_path ? (
           <img src={garden.photo_path} alt={garden.name}
             className="w-16 h-16 rounded-xl object-cover flex-shrink-0" />
         ) : (
-          <div className="w-16 h-16 rounded-xl bg-garden-100 flex items-center justify-center text-3xl flex-shrink-0">
+          <div className="w-16 h-16 rounded-xl bg-white border border-garden-200 flex items-center justify-center text-3xl flex-shrink-0">
             {GARDEN_TYPE_ICONS[garden.garden_type] || '🌱'}
           </div>
         )}
         <div className="flex-1 min-w-0">
-          <h1 className="text-2xl font-bold text-gray-900 truncate">{garden.name}</h1>
-          <div className="flex flex-wrap gap-2 mt-1 text-sm text-gray-500">
+          <p className="text-xs font-semibold text-garden-600 uppercase tracking-wide mb-0.5">You're planning</p>
+          <h1 className="text-2xl font-bold text-gray-900 leading-tight">{garden.name}</h1>
+          <div className="flex flex-wrap gap-2 mt-1.5 text-sm text-gray-500">
             <span className="capitalize">{garden.garden_type?.replace('_', ' ')}</span>
             {garden.width_ft && garden.length_ft && (
               <span>· {garden.width_ft}×{garden.length_ft} ft</span>
@@ -139,9 +147,6 @@ export default function GardenView() {
             )}
           </div>
         </div>
-        <Link to="/dashboard" className="text-sm text-gray-400 hover:text-gray-600 flex-shrink-0">
-          ← Dashboard
-        </Link>
       </div>
 
       {/* Tabs */}
@@ -220,6 +225,22 @@ export default function GardenView() {
       {/* Plants Tab */}
       {tab === 'plants' && (
         <div>
+          {/* How-to banner */}
+          <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 mb-4 flex items-start justify-between gap-3">
+            <div className="text-sm text-blue-800">
+              <span className="font-semibold">Tap a plant card to add it to {garden.name}.</span>
+              {' '}When you're done, switch to the <strong>Layout</strong> tab to see your planting map.
+            </div>
+            {gardenPlants.length > 0 && (
+              <button
+                onClick={() => setTab('layout')}
+                className="flex-shrink-0 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap"
+              >
+                View Layout ({gardenPlants.length}) →
+              </button>
+            )}
+          </div>
+
           {/* Zone notice */}
           {zone && (
             <div className="bg-garden-50 border border-garden-200 rounded-xl px-4 py-3 mb-4 text-sm text-garden-800">

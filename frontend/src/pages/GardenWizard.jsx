@@ -47,6 +47,8 @@ function makeArea(index) {
     units: [],           // [{ id, type_id, label, width_ft, length_ft, x, y }]
     sun_exposure: 'full_sun',
     dimensions_notes: '',
+    has_fencing: false,
+    irrigation_type: 'hand',
   };
 }
 
@@ -82,8 +84,8 @@ function syncUnits(area) {
 
 const SCALE  = 14;   // px per foot
 const SNAP   = 7;    // snap increment = 0.5 ft
-const CVS_W  = 340;
-const CVS_H  = 260;
+const CVS_W  = 560;
+const CVS_H  = 400;
 
 function snapVal(v) { return Math.round(v / SNAP) * SNAP; }
 
@@ -144,11 +146,11 @@ function GardenBuilder({ units, onLayoutChange }) {
   };
 
   return (
-    <div>
+    <div className="overflow-x-auto -mx-1">
       <div
         ref={canvasRef}
         className="relative rounded-xl border-2 border-gray-200 bg-gray-50 overflow-hidden select-none touch-none"
-        style={{ width: CVS_W, height: CVS_H }}
+        style={{ width: CVS_W, height: CVS_H, minWidth: CVS_W }}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerLeave={onPointerUp}
@@ -189,6 +191,7 @@ function GardenBuilder({ units, onLayoutChange }) {
         Drag to arrange · shapes are proportional to the dimensions you entered
       </p>
     </div>
+    </div>
   );
 }
 
@@ -198,6 +201,7 @@ export default function GardenWizard() {
   const navigate = useNavigate();
   const [saving, setSaving]   = useState(false);
   const [error,  setError]    = useState('');
+  const [syncDims, setSyncDims] = useState(false);
   const photoRef = useRef();
 
   // Main steps: 0=Location, 1=Area count, 2=Area config loop, 3=Preferences, 4=Photo
@@ -212,8 +216,6 @@ export default function GardenWizard() {
     hardiness_zone: '',
     num_areas: 1,
     areas: [makeArea(0)],
-    has_fencing: false,
-    irrigation_type: 'hand',
     notes: '',
     photo: null,
     photoPreview: null,
@@ -235,6 +237,22 @@ export default function GardenWizard() {
       };
       return { ...f, areas };
     });
+
+  // When syncDims is on, propagate changes to all units in the area
+  const updateUnitMaybeSynced = (areaIdx, unitId, changes) => {
+    if (syncDims) {
+      setForm(f => {
+        const areas = [...f.areas];
+        areas[areaIdx] = {
+          ...areas[areaIdx],
+          units: areas[areaIdx].units.map(u => ({ ...u, ...changes })),
+        };
+        return { ...f, areas };
+      });
+    } else {
+      updateUnit(areaIdx, unitId, changes);
+    }
+  };
 
   // ── area-count change ──────────────────────────────────────────────────────
   const handleNumAreasChange = n => {
@@ -319,14 +337,14 @@ export default function GardenWizard() {
       if (form.location_city)  fd.append('location_city',  form.location_city);
       if (form.location_state) fd.append('location_state', form.location_state);
       if (form.hardiness_zone) fd.append('hardiness_zone', form.hardiness_zone);
-      fd.append('has_fencing',    form.has_fencing);
-      fd.append('irrigation_type', form.irrigation_type);
       if (form.notes)  fd.append('notes', form.notes);
       if (form.photo)  fd.append('photo', form.photo);
       fd.append('areas', JSON.stringify(form.areas));
 
-      // Backwards-compat primary fields
+      // Primary area fields (backwards-compat + per-area prefs)
       const primary = form.areas[0];
+      fd.append('has_fencing',     primary.has_fencing ?? false);
+      fd.append('irrigation_type', primary.irrigation_type || 'hand');
       if (primary.type_selections.length > 0) {
         fd.append('garden_type',  primary.type_selections[0].type_id);
         fd.append('sun_exposure', primary.sun_exposure);
@@ -335,6 +353,12 @@ export default function GardenWizard() {
           if (u0.width_ft)  fd.append('width_ft',  u0.width_ft);
           if (u0.length_ft) fd.append('length_ft', u0.length_ft);
         }
+      }
+
+      // Save unit positions as layout_data so the garden view can show familiar unit layout
+      const allUnits = form.areas.flatMap(a => a.units.map(u => ({ ...u, area_name: a.name })));
+      if (allUnits.length > 0) {
+        fd.append('layout_data', JSON.stringify({ version: 2, units: allUnits }));
       }
 
       const { data } = await api.post('/gardens', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
@@ -650,17 +674,39 @@ export default function GardenWizard() {
                   </p>
                 </div>
 
+                {/* Same dimensions toggle (only when multiple units) */}
+                {currentArea.units.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => setSyncDims(v => !v)}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-sm font-medium transition-all ${
+                      syncDims
+                        ? 'border-garden-500 bg-garden-50 text-garden-700'
+                        : 'border-gray-200 text-gray-600 hover:border-garden-300'
+                    }`}
+                  >
+                    <span className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all ${
+                      syncDims ? 'bg-garden-500 border-garden-500' : 'border-gray-300'
+                    }`}>
+                      {syncDims && <span className="text-white text-xs leading-none">✓</span>}
+                    </span>
+                    Use the same dimensions for all {currentArea.units.length} units
+                  </button>
+                )}
+
                 <div className="space-y-3">
-                  {currentArea.units.map(unit => {
+                  {currentArea.units.map((unit, unitIdx) => {
                     const c        = TYPE_COLORS[unit.type_id] || TYPE_COLORS.in_ground;
                     const typeInfo = GARDEN_TYPES.find(t => t.id === unit.type_id);
                     const sqft     = unit.width_ft && unit.length_ft
                       ? (parseFloat(unit.width_ft) * parseFloat(unit.length_ft)).toFixed(1)
                       : null;
+                    // When synced, only the first card is editable; others show a mirror note
+                    const isReadonly = syncDims && unitIdx > 0;
                     return (
                       <div
                         key={unit.id}
-                        className="rounded-xl border-2 p-4 space-y-3"
+                        className={`rounded-xl border-2 p-4 space-y-3 transition-opacity ${isReadonly ? 'opacity-60' : ''}`}
                         style={{ borderColor: c.border, backgroundColor: c.bg + 'cc' }}
                       >
                         <div className="flex items-center gap-2">
@@ -671,6 +717,9 @@ export default function GardenWizard() {
                               📐 {sqft} sq ft
                             </span>
                           )}
+                          {isReadonly && (
+                            <span className="ml-auto text-xs text-gray-400">mirrors unit 1</span>
+                          )}
                         </div>
                         <div className="grid grid-cols-2 gap-3">
                           <div>
@@ -678,8 +727,9 @@ export default function GardenWizard() {
                             <input
                               type="number" className="input"
                               value={unit.width_ft}
-                              onChange={e => updateUnit(areaIndex, unit.id, { width_ft: e.target.value })}
+                              onChange={e => updateUnitMaybeSynced(areaIndex, unit.id, { width_ft: e.target.value })}
                               placeholder="e.g. 4" min="0.5" step="0.5"
+                              readOnly={isReadonly}
                             />
                           </div>
                           <div>
@@ -687,8 +737,9 @@ export default function GardenWizard() {
                             <input
                               type="number" className="input"
                               value={unit.length_ft}
-                              onChange={e => updateUnit(areaIndex, unit.id, { length_ft: e.target.value })}
+                              onChange={e => updateUnitMaybeSynced(areaIndex, unit.id, { length_ft: e.target.value })}
                               placeholder="e.g. 8" min="0.5" step="0.5"
+                              readOnly={isReadonly}
                             />
                           </div>
                         </div>
@@ -765,49 +816,60 @@ export default function GardenWizard() {
           </>
         )}
 
-        {/* ── Step 3: Preferences ─────────────────────────────────────────── */}
+        {/* ── Step 3: Preferences (per-area) ──────────────────────────────── */}
         {step === 3 && (
           <div className="space-y-5">
             <h2 className="font-semibold text-gray-800">Garden preferences</h2>
 
-            <div>
-              <label className="label">Irrigation method</label>
-              <div className="grid grid-cols-2 gap-2">
-                {IRRIGATION_OPTIONS.map(irr => (
-                  <button
-                    key={irr.id}
-                    onClick={() => update('irrigation_type', irr.id)}
-                    className={`p-3 rounded-xl border-2 flex items-center gap-2 transition-all ${
-                      form.irrigation_type === irr.id
-                        ? 'border-garden-500 bg-garden-50'
-                        : 'border-gray-200 hover:border-garden-300'
-                    }`}
-                  >
-                    <span className="text-xl">{irr.emoji}</span>
-                    <span className="text-sm font-medium">{irr.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
+            {form.areas.map((area, idx) => (
+              <div
+                key={area.id}
+                className={`space-y-4 ${form.num_areas > 1 ? 'border border-gray-200 rounded-xl p-4' : ''}`}
+              >
+                {form.num_areas > 1 && (
+                  <h3 className="font-medium text-gray-700 text-sm">{area.name}</h3>
+                )}
 
-            <div>
-              <label className="label">🦌 Wildlife / fencing protection</label>
-              <p className="text-xs text-gray-500 mb-2">Do you have deer, rabbit, or pest fencing?</p>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => update('has_fencing', true)}
-                  className={`p-3 rounded-xl border-2 flex items-center justify-center transition-all ${
-                    form.has_fencing === true ? 'border-garden-500 bg-garden-50' : 'border-gray-200 hover:border-garden-300'
-                  }`}
-                ><span className="text-sm font-medium">Yes</span></button>
-                <button
-                  onClick={() => update('has_fencing', false)}
-                  className={`p-3 rounded-xl border-2 flex items-center justify-center transition-all ${
-                    form.has_fencing === false ? 'border-garden-500 bg-garden-50' : 'border-gray-200 hover:border-garden-300'
-                  }`}
-                ><span className="text-sm font-medium">No</span></button>
+                <div>
+                  <label className="label">Irrigation method</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {IRRIGATION_OPTIONS.map(irr => (
+                      <button
+                        key={irr.id}
+                        onClick={() => updateArea(idx, { irrigation_type: irr.id })}
+                        className={`p-3 rounded-xl border-2 flex items-center gap-2 transition-all ${
+                          area.irrigation_type === irr.id
+                            ? 'border-garden-500 bg-garden-50'
+                            : 'border-gray-200 hover:border-garden-300'
+                        }`}
+                      >
+                        <span className="text-xl">{irr.emoji}</span>
+                        <span className="text-sm font-medium">{irr.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="label">🦌 Wildlife / fencing protection</label>
+                  <p className="text-xs text-gray-500 mb-2">Do you have deer, rabbit, or pest fencing?</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => updateArea(idx, { has_fencing: true })}
+                      className={`p-3 rounded-xl border-2 flex items-center justify-center transition-all ${
+                        area.has_fencing === true ? 'border-garden-500 bg-garden-50' : 'border-gray-200 hover:border-garden-300'
+                      }`}
+                    ><span className="text-sm font-medium">Yes</span></button>
+                    <button
+                      onClick={() => updateArea(idx, { has_fencing: false })}
+                      className={`p-3 rounded-xl border-2 flex items-center justify-center transition-all ${
+                        area.has_fencing === false ? 'border-garden-500 bg-garden-50' : 'border-gray-200 hover:border-garden-300'
+                      }`}
+                    ><span className="text-sm font-medium">No</span></button>
+                  </div>
+                </div>
               </div>
-            </div>
+            ))}
 
             <div>
               <label className="label">Notes (optional)</label>
