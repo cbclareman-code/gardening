@@ -1,265 +1,343 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import { getZoneFromCity, getZoneLabel } from '../utils/api';
 
 const GARDEN_TYPES = [
-  { id: 'in_ground', emoji: '🌱', label: 'In-Ground', desc: 'Traditional garden dug into native soil — rows or beds' },
-  { id: 'raised_bed', emoji: '📦', label: 'Raised Bed', desc: 'Wooden or brick frames filled with premium soil mix' },
-  { id: 'container', emoji: '🪴', label: 'Container', desc: 'Pots, planters, and barrels — great for patios' },
-  { id: 'vertical', emoji: '🧱', label: 'Vertical', desc: 'Walls, trellises, and tower systems for small spaces' },
-  { id: 'hugelkultur', emoji: '🏔️', label: 'Hügelkultur', desc: 'Mounded beds over buried logs for moisture retention' },
-  { id: 'straw_bale', emoji: '🌾', label: 'Straw Bale', desc: 'Conditioned straw bales as self-contained grow beds' },
-  { id: 'greenhouse', emoji: '🫙', label: 'Greenhouse', desc: 'Climate-controlled growing space for year-round gardening' },
+  { id: 'in_ground',   emoji: '🌱', label: 'In-Ground',   desc: 'Traditional garden dug into native soil' },
+  { id: 'raised_bed',  emoji: '📦', label: 'Raised Bed',  desc: 'Wooden or brick frames filled with premium soil mix' },
+  { id: 'container',   emoji: '🪴', label: 'Container',   desc: 'Pots, planters, and barrels' },
+  { id: 'vertical',    emoji: '🧱', label: 'Vertical',    desc: 'Walls, trellises, and tower systems' },
+  { id: 'hugelkultur', emoji: '🏔️', label: 'Hügelkultur', desc: 'Mounded beds over buried logs' },
+  { id: 'straw_bale',  emoji: '🌾', label: 'Straw Bale',  desc: 'Conditioned straw bales as grow beds' },
+  { id: 'greenhouse',  emoji: '🫙', label: 'Greenhouse',  desc: 'Climate-controlled growing space' },
 ];
 
 const SUN_OPTIONS = [
-  { id: 'full_sun', emoji: '☀️', label: 'Full Sun', desc: '6+ hours direct sun daily' },
-  { id: 'part_shade', emoji: '⛅', label: 'Part Shade', desc: '3–6 hours of sun daily' },
-  { id: 'shade', emoji: '🌥️', label: 'Shade', desc: 'Less than 3 hours of sun daily' },
+  { id: 'full_sun',   emoji: '☀️',  label: 'Full Sun',   desc: '6+ hours direct sun daily' },
+  { id: 'part_shade', emoji: '⛅',  label: 'Part Shade', desc: '3–6 hours of sun daily' },
+  { id: 'shade',      emoji: '🌥️', label: 'Shade',       desc: 'Less than 3 hours of sun daily' },
 ];
 
 const IRRIGATION_OPTIONS = [
-  { id: 'drip', emoji: '💧', label: 'Drip' },
-  { id: 'hose', emoji: '🚿', label: 'Hose' },
-  { id: 'hand', emoji: '🫗', label: 'Hand water' },
+  { id: 'drip',      emoji: '💧', label: 'Drip' },
+  { id: 'hose',      emoji: '🚿', label: 'Hose' },
+  { id: 'hand',      emoji: '🫗', label: 'Hand water' },
   { id: 'sprinkler', emoji: '⛲', label: 'Sprinkler' },
 ];
 
-const BED_LAYOUTS = [
-  { id: 'single', label: 'Single Bed', desc: 'One rectangular raised bed' },
-  { id: 'row_2', label: 'Two Beds (Row)', desc: 'Two beds side by side with a walking path' },
-  { id: 'row_3', label: 'Three Beds (Row)', desc: 'Three beds in a row with paths between' },
-  { id: 'l_shape', label: 'L-Shape', desc: 'Two beds at a right angle with corner access' },
-  { id: 'u_shape', label: 'U-Shape (3 beds)', desc: 'Two side beds + one connecting end bed' },
-  { id: 'u_shape_4', label: 'U-Shape (4 beds)', desc: '3 parallel beds + 1 end bed — great for larger setups' },
-];
+// Per-type colors used in the builder and dimension cards
+const TYPE_COLORS = {
+  raised_bed:   { bg: '#fef3c7', border: '#d97706', text: '#92400e' },
+  in_ground:    { bg: '#dcfce7', border: '#16a34a', text: '#14532d' },
+  container:    { bg: '#dbeafe', border: '#2563eb', text: '#1e3a8a' },
+  vertical:     { bg: '#f3e8ff', border: '#9333ea', text: '#581c87' },
+  hugelkultur:  { bg: '#fce7f3', border: '#db2777', text: '#831843' },
+  straw_bale:   { bg: '#fff7ed', border: '#ea580c', text: '#7c2d12' },
+  greenhouse:   { bg: '#f0fdf4', border: '#15803d', text: '#052e16' },
+};
 
-function generateBedConfig(layout, bedWidth, bedLength, pathWidth) {
-  const bw = parseFloat(bedWidth) || 4;
-  const bl = parseFloat(bedLength) || 8;
-  const pw = parseFloat(pathWidth) || 3;
+// ─── helpers ──────────────────────────────────────────────────────────────────
 
-  const configs = {
-    single: {
-      beds: [{ id: 1, label: 'Bed 1', x: 0, y: 0, width: bw, length: bl }],
-      total_width: bw,
-      total_length: bl,
-    },
-    row_2: {
-      beds: [
-        { id: 1, label: 'Bed A', x: 0, y: 0, width: bw, length: bl },
-        { id: 2, label: 'Bed B', x: bw + pw, y: 0, width: bw, length: bl },
-      ],
-      total_width: 2 * bw + pw,
-      total_length: bl,
-    },
-    row_3: {
-      beds: [
-        { id: 1, label: 'Bed A', x: 0, y: 0, width: bw, length: bl },
-        { id: 2, label: 'Bed B', x: bw + pw, y: 0, width: bw, length: bl },
-        { id: 3, label: 'Bed C', x: 2 * (bw + pw), y: 0, width: bw, length: bl },
-      ],
-      total_width: 3 * bw + 2 * pw,
-      total_length: bl,
-    },
-    l_shape: {
-      beds: [
-        { id: 1, label: 'Long Bed', x: 0, y: 0, width: bw, length: bl },
-        { id: 2, label: 'Corner Bed', x: bw + pw, y: bl - bw, width: bw, length: bw },
-      ],
-      total_width: 2 * bw + pw,
-      total_length: bl,
-    },
-    u_shape: {
-      beds: [
-        { id: 1, label: 'Left Arm', x: 0, y: 0, width: bw, length: bl },
-        { id: 2, label: 'Right Arm', x: bw + pw, y: 0, width: bw, length: bl },
-        { id: 3, label: 'Back Bed', x: 0, y: bl + pw, width: 2 * bw + pw, length: bw },
-      ],
-      total_width: 2 * bw + pw,
-      total_length: bl + pw + bw,
-    },
-    u_shape_4: {
-      beds: [
-        { id: 1, label: 'Bed 1', x: 0, y: 0, width: bw, length: bl },
-        { id: 2, label: 'Bed 2', x: bw + pw, y: 0, width: bw, length: bl },
-        { id: 3, label: 'Bed 3', x: 2 * (bw + pw), y: 0, width: bw, length: bl },
-        { id: 4, label: 'End Bed', x: 0, y: bl + pw, width: 3 * bw + 2 * pw, length: bw },
-      ],
-      total_width: 3 * bw + 2 * pw,
-      total_length: bl + pw + bw,
-    },
+function makeArea(index) {
+  return {
+    id: index + 1,
+    name: `Area ${index + 1}`,
+    type_selections: [], // [{ type_id, quantity }]
+    units: [],           // [{ id, type_id, label, width_ft, length_ft, x, y }]
+    sun_exposure: 'full_sun',
+    dimensions_notes: '',
   };
-
-  const c = configs[layout];
-  if (!c) return null;
-  return { layout, ...c };
 }
 
-function BedPreview({ layoutId, bedWidthFt, bedLengthFt, pathWidthFt }) {
-  const config = generateBedConfig(layoutId, bedWidthFt, bedLengthFt, pathWidthFt);
-  if (!config || !config.beds) return null;
+function totalUnitsInArea(area) {
+  return area.type_selections.reduce((sum, s) => sum + s.quantity, 0);
+}
 
-  const { beds, total_width, total_length } = config;
-  const PAD = 10;
-  const MAX_DIM = 170;
-  const scale = (MAX_DIM - 2 * PAD) / Math.max(total_width, total_length);
-  const svgW = Math.round(total_width * scale + 2 * PAD);
-  const svgH = Math.round(total_length * scale + 2 * PAD);
+// Merge type_selections + quantities into a flat units array, preserving
+// existing dimension/position data where the unit id matches.
+function syncUnits(area) {
+  const next = [];
+  let id = 1;
+  for (const sel of area.type_selections) {
+    const typeInfo = GARDEN_TYPES.find(t => t.id === sel.type_id);
+    for (let i = 0; i < sel.quantity; i++) {
+      const prev = area.units.find(u => u.id === id);
+      next.push({
+        id,
+        type_id: sel.type_id,
+        label: sel.quantity > 1 ? `${typeInfo.label} ${i + 1}` : typeInfo.label,
+        width_ft:  prev?.width_ft  ?? '',
+        length_ft: prev?.length_ft ?? '',
+        x: prev?.x ?? 12 + (id - 1) * 22,
+        y: prev?.y ?? 12,
+      });
+      id++;
+    }
+  }
+  return next;
+}
+
+// ─── GardenBuilder ────────────────────────────────────────────────────────────
+
+const SCALE  = 14;   // px per foot
+const SNAP   = 7;    // snap increment = 0.5 ft
+const CVS_W  = 340;
+const CVS_H  = 260;
+
+function snapVal(v) { return Math.round(v / SNAP) * SNAP; }
+
+function unitPx(unit) {
+  return {
+    w: Math.max((parseFloat(unit.width_ft)  || 3) * SCALE, 38),
+    h: Math.max((parseFloat(unit.length_ft) || 3) * SCALE, 26),
+  };
+}
+
+function GardenBuilder({ units, onLayoutChange }) {
+  const [pos, setPos] = useState(() => {
+    const p = {};
+    units.forEach(u => { p[u.id] = { x: u.x ?? 12, y: u.y ?? 12 }; });
+    return p;
+  });
+
+  // If units list grows (e.g. user navigates back and forward) seed new ones
+  useEffect(() => {
+    setPos(prev => {
+      const p = { ...prev };
+      units.forEach(u => { if (!p[u.id]) p[u.id] = { x: 12 + u.id * 20, y: 12 }; });
+      return p;
+    });
+  }, [units.length]);
+
+  const dragging = useRef(null);
+  const canvasRef = useRef();
+
+  const onPointerDown = (e, unitId) => {
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const rect = canvasRef.current.getBoundingClientRect();
+    const cur = pos[unitId] || { x: 12, y: 12 };
+    dragging.current = {
+      unitId,
+      ox: e.clientX - rect.left - cur.x,
+      oy: e.clientY - rect.top  - cur.y,
+    };
+  };
+
+  const onPointerMove = e => {
+    if (!dragging.current) return;
+    const rect = canvasRef.current.getBoundingClientRect();
+    const { unitId, ox, oy } = dragging.current;
+    const unit = units.find(u => u.id === unitId);
+    const { w, h } = unitPx(unit);
+    const x = Math.max(0, Math.min(CVS_W - w, snapVal(e.clientX - rect.left - ox)));
+    const y = Math.max(0, Math.min(CVS_H - h, snapVal(e.clientY - rect.top  - oy)));
+    setPos(prev => ({ ...prev, [unitId]: { x, y } }));
+  };
+
+  const onPointerUp = () => {
+    if (dragging.current) {
+      onLayoutChange(pos);
+      dragging.current = null;
+    }
+  };
 
   return (
-    <svg
-      width={svgW}
-      height={svgH}
-      viewBox={`0 0 ${svgW} ${svgH}`}
-      className="rounded-lg border border-amber-200 bg-amber-50/40"
-    >
-      {beds.map((bed) => {
-        const bx = PAD + bed.x * scale;
-        const by = PAD + bed.y * scale;
-        const bw = bed.width * scale;
-        const bh = bed.length * scale;
-        const fontSize = Math.max(6, Math.min(10, bw / Math.max(bed.label.length * 0.7, 1)));
-        return (
-          <g key={bed.id}>
-            <rect x={bx} y={by} width={bw} height={bh} rx={3} fill="#92400e20" stroke="#78350f" strokeWidth={1.5} />
-            {bw > 22 && bh > 12 && (
-              <text
-                x={bx + bw / 2}
-                y={by + bh / 2}
-                textAnchor="middle"
-                dominantBaseline="middle"
-                fontSize={fontSize}
-                fill="#78350f"
-                fontWeight="500"
+    <div>
+      <div
+        ref={canvasRef}
+        className="relative rounded-xl border-2 border-gray-200 bg-gray-50 overflow-hidden select-none touch-none"
+        style={{ width: CVS_W, height: CVS_H }}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerLeave={onPointerUp}
+      >
+        {/* Grid lines */}
+        <svg className="absolute inset-0 pointer-events-none" width={CVS_W} height={CVS_H}>
+          <defs>
+            <pattern id="builder-grid" width={SNAP * 2} height={SNAP * 2} patternUnits="userSpaceOnUse">
+              <path d={`M ${SNAP * 2} 0 L 0 0 0 ${SNAP * 2}`} fill="none" stroke="#e5e7eb" strokeWidth="0.5" />
+            </pattern>
+          </defs>
+          <rect width={CVS_W} height={CVS_H} fill="url(#builder-grid)" />
+        </svg>
+
+        {/* Units */}
+        {units.map(unit => {
+          const p = pos[unit.id] || { x: 12, y: 12 };
+          const { w, h } = unitPx(unit);
+          const c = TYPE_COLORS[unit.type_id] || TYPE_COLORS.in_ground;
+          return (
+            <div
+              key={unit.id}
+              className="absolute rounded-lg border-2 flex items-center justify-center cursor-grab active:cursor-grabbing"
+              style={{ left: p.x, top: p.y, width: w, height: h, backgroundColor: c.bg, borderColor: c.border }}
+              onPointerDown={e => onPointerDown(e, unit.id)}
+            >
+              <span
+                className="text-xs font-semibold text-center px-1 leading-tight pointer-events-none"
+                style={{ color: c.text }}
               >
-                {bed.label}
-              </text>
-            )}
-          </g>
-        );
-      })}
-    </svg>
+                {unit.label}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      <p className="text-xs text-gray-400 mt-2 text-center">
+        Drag to arrange · shapes are proportional to the dimensions you entered
+      </p>
+    </div>
   );
 }
 
+// ─── GardenWizard ─────────────────────────────────────────────────────────────
+
 export default function GardenWizard() {
   const navigate = useNavigate();
-  const [step, setStep] = useState(0);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
+  const [saving, setSaving]   = useState(false);
+  const [error,  setError]    = useState('');
   const photoRef = useRef();
+
+  // Main steps: 0=Location, 1=Area count, 2=Area config loop, 3=Preferences, 4=Photo
+  const [step,        setStep]        = useState(0);
+  const [areaIndex,   setAreaIndex]   = useState(0);
+  const [areaSubStep, setAreaSubStep] = useState(0); // 0=types, 1=dims, 2=builder
 
   const [form, setForm] = useState({
     name: '',
     location_city: '',
     location_state: '',
     hardiness_zone: '',
-    garden_type: '',
-    width_ft: '',
-    length_ft: '',
-    sun_exposure: 'full_sun',
+    num_areas: 1,
+    areas: [makeArea(0)],
     has_fencing: false,
     irrigation_type: 'hand',
     notes: '',
     photo: null,
     photoPreview: null,
-    bed_layout: 'single',
-    bed_width_ft: 4,
-    bed_length_ft: 8,
-    path_width_ft: 3,
-    dimensions_notes: '',
   });
 
-  const update = (key, val) => setForm(f => ({ ...f, [key]: val }));
+  const update     = (key, val) => setForm(f => ({ ...f, [key]: val }));
+  const updateArea = (idx, changes) =>
+    setForm(f => {
+      const areas = [...f.areas];
+      areas[idx] = { ...areas[idx], ...changes };
+      return { ...f, areas };
+    });
+  const updateUnit = (areaIdx, unitId, changes) =>
+    setForm(f => {
+      const areas = [...f.areas];
+      areas[areaIdx] = {
+        ...areas[areaIdx],
+        units: areas[areaIdx].units.map(u => u.id === unitId ? { ...u, ...changes } : u),
+      };
+      return { ...f, areas };
+    });
 
-  // Dynamic steps based on garden type
-  const STEPS = form.garden_type === 'raised_bed'
-    ? ['Location & Zone', 'Garden Type', 'Bed Layout', 'Preferences', 'Photo']
-    : ['Location & Zone', 'Garden Type', 'Dimensions', 'Preferences', 'Photo'];
+  // ── area-count change ──────────────────────────────────────────────────────
+  const handleNumAreasChange = n => {
+    const count = Math.max(1, Math.min(6, n));
+    setForm(f => {
+      const areas = Array.from({ length: count }, (_, i) => f.areas[i] || makeArea(i));
+      return { ...f, num_areas: count, areas };
+    });
+  };
 
+  // ── type selection ─────────────────────────────────────────────────────────
+  const toggleType = (areaIdx, typeId) =>
+    setForm(f => {
+      const areas = [...f.areas];
+      const area  = { ...areas[areaIdx] };
+      const has   = area.type_selections.find(s => s.type_id === typeId);
+      area.type_selections = has
+        ? area.type_selections.filter(s => s.type_id !== typeId)
+        : [...area.type_selections, { type_id: typeId, quantity: 1 }];
+      areas[areaIdx] = area;
+      return { ...f, areas };
+    });
+
+  const setQty = (areaIdx, typeId, qty) =>
+    setForm(f => {
+      const areas = [...f.areas];
+      const area  = { ...areas[areaIdx] };
+      area.type_selections = area.type_selections.map(s =>
+        s.type_id === typeId ? { ...s, quantity: Math.max(1, qty) } : s
+      );
+      areas[areaIdx] = area;
+      return { ...f, areas };
+    });
+
+  // ── location helpers ───────────────────────────────────────────────────────
   const handleLocationDetect = () => {
-    if (!navigator.geolocation) {
-      setError('Geolocation not supported by your browser');
-      return;
-    }
+    if (!navigator.geolocation) { setError('Geolocation not supported'); return; }
     navigator.geolocation.getCurrentPosition(
-      async (pos) => {
+      async pos => {
         try {
           const { latitude, longitude } = pos.coords;
           const resp = await fetch(
             `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`
           );
           const data = await resp.json();
-          const city = data.address?.city || data.address?.town || data.address?.village || '';
+          const city  = data.address?.city || data.address?.town || data.address?.village || '';
           const state = data.address?.state_code || data.address?.state || '';
-          const zone = getZoneFromCity(city, state);
+          const zone  = getZoneFromCity(city, state);
           setForm(f => ({ ...f, location_city: city, location_state: state, hardiness_zone: String(zone) }));
-        } catch {
-          setError('Could not determine location from coordinates');
-        }
+        } catch { setError('Could not determine location'); }
       },
-      () => setError('Location access denied. Please enter manually.')
+      () => setError('Location access denied.')
     );
   };
 
-  const handleZoneFromLocation = () => {
+  const handleZoneBlur = () => {
     if (form.location_state) {
-      const zone = getZoneFromCity(form.location_city, form.location_state);
-      update('hardiness_zone', String(zone));
+      update('hardiness_zone', String(getZoneFromCity(form.location_city, form.location_state)));
     }
   };
 
-  const handlePhotoChange = (e) => {
+  // ── photo ──────────────────────────────────────────────────────────────────
+  const handlePhotoChange = e => {
     const file = e.target.files[0];
     if (!file) return;
     update('photo', file);
     const reader = new FileReader();
-    reader.onload = (ev) => update('photoPreview', ev.target.result);
+    reader.onload = ev => update('photoPreview', ev.target.result);
     reader.readAsDataURL(file);
   };
 
+  // ── submit ─────────────────────────────────────────────────────────────────
   const handleSubmit = async () => {
     if (!form.name.trim()) { setError('Garden name is required'); return; }
-    if (!form.garden_type) { setError('Please select a garden type'); return; }
-
-    setSaving(true);
-    setError('');
-
+    if (form.areas.some(a => a.type_selections.length === 0)) {
+      setError('Please select at least one garden type for each area'); return;
+    }
+    setSaving(true); setError('');
     try {
       const fd = new FormData();
       fd.append('name', form.name.trim());
-      fd.append('garden_type', form.garden_type);
-      if (form.location_city) fd.append('location_city', form.location_city);
+      if (form.location_city)  fd.append('location_city',  form.location_city);
       if (form.location_state) fd.append('location_state', form.location_state);
       if (form.hardiness_zone) fd.append('hardiness_zone', form.hardiness_zone);
-      fd.append('sun_exposure', form.sun_exposure);
-      fd.append('has_fencing', form.has_fencing);
+      fd.append('has_fencing',    form.has_fencing);
       fd.append('irrigation_type', form.irrigation_type);
-      if (form.notes) fd.append('notes', form.notes);
-      if (form.photo) fd.append('photo', form.photo);
+      if (form.notes)  fd.append('notes', form.notes);
+      if (form.photo)  fd.append('photo', form.photo);
+      fd.append('areas', JSON.stringify(form.areas));
 
-      if (form.garden_type === 'raised_bed') {
-        const bedConfig = generateBedConfig(
-          form.bed_layout,
-          form.bed_width_ft,
-          form.bed_length_ft,
-          form.path_width_ft
-        );
-        if (bedConfig) {
-          fd.append('width_ft', bedConfig.total_width);
-          fd.append('length_ft', bedConfig.total_length);
-          fd.append('layout_data', JSON.stringify(bedConfig));
+      // Backwards-compat primary fields
+      const primary = form.areas[0];
+      if (primary.type_selections.length > 0) {
+        fd.append('garden_type',  primary.type_selections[0].type_id);
+        fd.append('sun_exposure', primary.sun_exposure);
+        const u0 = primary.units[0];
+        if (u0) {
+          if (u0.width_ft)  fd.append('width_ft',  u0.width_ft);
+          if (u0.length_ft) fd.append('length_ft', u0.length_ft);
         }
-      } else {
-        if (form.width_ft) fd.append('width_ft', form.width_ft);
-        if (form.length_ft) fd.append('length_ft', form.length_ft);
       }
 
-      const { data } = await api.post('/gardens', fd, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      const { data } = await api.post('/gardens', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
       navigate(`/garden/${data.garden.id}`);
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to create garden');
@@ -268,39 +346,112 @@ export default function GardenWizard() {
     }
   };
 
+  // ── navigation ─────────────────────────────────────────────────────────────
+  const currentArea = form.areas[areaIndex];
+  const isMultiUnit = currentArea ? totalUnitsInArea(currentArea) > 1 : false;
+
   const canAdvance = () => {
     if (step === 0) return form.name.trim().length > 0;
-    if (step === 1) return !!form.garden_type;
-    if (step === 2 && form.garden_type === 'raised_bed') {
-      return !!form.bed_layout && Number(form.bed_width_ft) > 0 && Number(form.bed_length_ft) > 0;
+    if (step === 1) return form.num_areas >= 1;
+    if (step === 2 && currentArea) {
+      if (areaSubStep === 0) return currentArea.type_selections.length > 0;
+      if (areaSubStep === 1) return currentArea.units.every(u => Number(u.width_ft) > 0 && Number(u.length_ft) > 0);
+      return true; // builder is optional
     }
     return true;
   };
 
-  const progress = ((step + 1) / STEPS.length) * 100;
+  const goNextArea = () => {
+    if (areaIndex < form.num_areas - 1) {
+      setAreaIndex(i => i + 1);
+      setAreaSubStep(0);
+    } else {
+      setStep(3);
+    }
+  };
 
-  const liveConfig = form.garden_type === 'raised_bed' && step === 2
-    ? generateBedConfig(form.bed_layout, form.bed_width_ft, form.bed_length_ft, form.path_width_ft)
-    : null;
+  const handleNext = () => {
+    setError('');
+    if (step === 0) { setStep(1); return; }
+    if (step === 1) { setStep(2); setAreaIndex(0); setAreaSubStep(0); return; }
+    if (step === 2) {
+      if (areaSubStep === 0) {
+        // Sync units from selections, preserving existing dimension data
+        const synced = syncUnits(currentArea);
+        updateArea(areaIndex, { units: synced });
+        setAreaSubStep(1);
+      } else if (areaSubStep === 1) {
+        if (isMultiUnit) setAreaSubStep(2);
+        else goNextArea();
+      } else {
+        goNextArea();
+      }
+      return;
+    }
+    if (step === 3) { setStep(4); return; }
+  };
 
+  const handleBack = () => {
+    setError('');
+    if (step <= 0) return;
+    if (step === 1) { setStep(0); return; }
+    if (step === 2) {
+      if (areaSubStep === 2) { setAreaSubStep(1); return; }
+      if (areaSubStep === 1) { setAreaSubStep(0); return; }
+      // areaSubStep === 0
+      if (areaIndex === 0) { setStep(1); }
+      else {
+        const prevArea = form.areas[areaIndex - 1];
+        setAreaIndex(i => i - 1);
+        setAreaSubStep(totalUnitsInArea(prevArea) > 1 ? 2 : 1);
+      }
+      return;
+    }
+    if (step === 3) {
+      setStep(2);
+      const lastIdx  = form.num_areas - 1;
+      const lastArea = form.areas[lastIdx];
+      setAreaIndex(lastIdx);
+      setAreaSubStep(totalUnitsInArea(lastArea) > 1 ? 2 : 1);
+      return;
+    }
+    if (step === 4) { setStep(3); return; }
+  };
+
+  // ── progress bar ───────────────────────────────────────────────────────────
+  // Total "slots": location + areas + (each area's sub-steps) + prefs + photo
+  const areaSlots   = form.areas.reduce((s, a) => s + (totalUnitsInArea(a) > 1 ? 3 : 2), 0);
+  const totalSlots  = 2 + areaSlots + 2;
+  const doneSlots   = step === 0 ? 0
+    : step === 1 ? 1
+    : step === 2 ? 2 + form.areas.slice(0, areaIndex).reduce((s, a) => s + (totalUnitsInArea(a) > 1 ? 3 : 2), 0) + areaSubStep
+    : step === 3 ? 2 + areaSlots
+    : 2 + areaSlots + 1;
+
+  const progress = Math.round((doneSlots / totalSlots) * 100);
+
+  const stepLabel = step === 0 ? 'Location'
+    : step === 1 ? 'Garden Areas'
+    : step === 2 && areaSubStep === 0 ? `${currentArea?.name}: Types`
+    : step === 2 && areaSubStep === 1 ? `${currentArea?.name}: Dimensions`
+    : step === 2 && areaSubStep === 2 ? `${currentArea?.name}: Layout`
+    : step === 3 ? 'Preferences'
+    : 'Photo';
+
+  // ── render ─────────────────────────────────────────────────────────────────
   return (
     <div className="max-w-2xl mx-auto px-4 py-8">
-      {/* Progress */}
+      {/* Header */}
       <div className="mb-8">
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between mb-3">
           <h1 className="text-xl font-bold text-gray-900">New Garden</h1>
-          <span className="text-sm text-gray-500">Step {step + 1} of {STEPS.length}</span>
+          <span className="text-sm text-gray-500">{stepLabel}</span>
         </div>
         <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
           <div
             className="h-full bg-garden-500 rounded-full transition-all duration-500"
             style={{ width: `${progress}%` }}
           />
-        </div>
-        <div className="flex justify-between mt-1 text-xs text-gray-400">
-          {STEPS.map((s, i) => (
-            <span key={s} className={i <= step ? 'text-garden-600 font-medium' : ''}>{s}</span>
-          ))}
         </div>
       </div>
 
@@ -311,7 +462,7 @@ export default function GardenWizard() {
           </div>
         )}
 
-        {/* Step 0: Location & Name */}
+        {/* ── Step 0: Location & Name ─────────────────────────────────────── */}
         {step === 0 && (
           <div className="space-y-5">
             <div>
@@ -319,286 +470,302 @@ export default function GardenWizard() {
               <input
                 className="input"
                 value={form.name}
-                onChange={(e) => update('name', e.target.value)}
-                placeholder="e.g. Backyard Veggie Patch"
+                onChange={e => update('name', e.target.value)}
+                placeholder="e.g. My Home Garden"
                 autoFocus
               />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="label">City</label>
-                <input
-                  className="input"
-                  value={form.location_city}
-                  onChange={(e) => update('location_city', e.target.value)}
-                  onBlur={handleZoneFromLocation}
-                  placeholder="Springfield"
-                />
+                <input className="input" value={form.location_city}
+                  onChange={e => update('location_city', e.target.value)}
+                  onBlur={handleZoneBlur} placeholder="Springfield" />
               </div>
               <div>
                 <label className="label">State (2-letter)</label>
-                <input
-                  className="input uppercase"
-                  value={form.location_state}
-                  onChange={(e) => update('location_state', e.target.value.toUpperCase())}
-                  onBlur={handleZoneFromLocation}
-                  placeholder="IL"
-                  maxLength={2}
-                />
+                <input className="input uppercase" value={form.location_state}
+                  onChange={e => update('location_state', e.target.value.toUpperCase())}
+                  onBlur={handleZoneBlur} placeholder="IL" maxLength={2} />
               </div>
             </div>
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="label mb-0">Hardiness Zone</label>
-                <button
-                  type="button"
-                  onClick={handleLocationDetect}
-                  className="text-xs text-garden-600 hover:underline"
-                >
+                <button type="button" onClick={handleLocationDetect} className="text-xs text-garden-600 hover:underline">
                   📍 Detect my location
                 </button>
               </div>
-              <input
-                className="input"
-                value={form.hardiness_zone}
-                onChange={(e) => update('hardiness_zone', e.target.value)}
-                placeholder="e.g. 6b or 7a"
-              />
+              <input className="input" value={form.hardiness_zone}
+                onChange={e => update('hardiness_zone', e.target.value)}
+                placeholder="e.g. 6b or 7a" />
               {form.hardiness_zone && (
-                <p className="text-xs text-garden-700 mt-1">
-                  {getZoneLabel(form.hardiness_zone)}
-                </p>
+                <p className="text-xs text-garden-700 mt-1">{getZoneLabel(form.hardiness_zone)}</p>
               )}
             </div>
           </div>
         )}
 
-        {/* Step 1: Garden Type */}
+        {/* ── Step 1: Number of garden areas ─────────────────────────────── */}
         {step === 1 && (
-          <div>
-            <h2 className="font-semibold text-gray-800 mb-4">What type of garden?</h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {GARDEN_TYPES.map((type) => (
-                <button
-                  key={type.id}
-                  onClick={() => update('garden_type', type.id)}
-                  className={`p-4 rounded-xl border-2 text-left transition-all ${
-                    form.garden_type === type.id
-                      ? 'border-garden-500 bg-garden-50'
-                      : 'border-gray-200 hover:border-garden-300 hover:bg-gray-50'
-                  }`}
-                >
-                  <div className="text-3xl mb-2">{type.emoji}</div>
-                  <div className="font-medium text-sm text-gray-900">{type.label}</div>
-                  <div className="text-xs text-gray-500 mt-1 leading-snug">{type.desc}</div>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Step 2: Bed Layout Builder (raised_bed only) */}
-        {step === 2 && form.garden_type === 'raised_bed' && (
-          <div className="space-y-5">
+          <div className="space-y-6">
             <div>
-              <h2 className="font-semibold text-gray-800 mb-1">Design your bed layout</h2>
-              <p className="text-sm text-gray-500 mb-4">Choose a configuration and set your bed dimensions.</p>
-
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-5">
-                {BED_LAYOUTS.map((layout) => (
+              <h2 className="font-semibold text-gray-800 mb-1">How many garden areas do you have?</h2>
+              <p className="text-sm text-gray-500 mb-5">
+                A garden area is a distinct section of your property with its own boundaries — like a backyard
+                raised-bed setup, a front-porch container garden, or a side-yard in-ground plot.
+              </p>
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+                {[1, 2, 3, 4, 5, 6].map(n => (
                   <button
-                    key={layout.id}
-                    onClick={() => update('bed_layout', layout.id)}
-                    className={`p-3 rounded-xl border-2 text-left transition-all ${
-                      form.bed_layout === layout.id
-                        ? 'border-garden-500 bg-garden-50'
-                        : 'border-gray-200 hover:border-garden-300 hover:bg-gray-50'
+                    key={n}
+                    onClick={() => handleNumAreasChange(n)}
+                    className={`py-5 rounded-xl border-2 font-bold text-2xl transition-all ${
+                      form.num_areas === n
+                        ? 'border-garden-500 bg-garden-50 text-garden-700'
+                        : 'border-gray-200 hover:border-garden-300 text-gray-700'
                     }`}
                   >
-                    <div className="font-medium text-sm text-gray-900 mb-0.5">{layout.label}</div>
-                    <div className="text-xs text-gray-500 leading-snug">{layout.desc}</div>
-                  </button>
-                ))}
-              </div>
-
-              <div className={`grid gap-3 mb-4 ${form.bed_layout !== 'single' ? 'grid-cols-3' : 'grid-cols-2'}`}>
-                <div>
-                  <label className="label">Bed Width (ft)</label>
-                  <input
-                    type="number"
-                    className="input"
-                    value={form.bed_width_ft}
-                    onChange={(e) => update('bed_width_ft', e.target.value)}
-                    min="1"
-                    step="0.5"
-                    placeholder="4"
-                  />
-                </div>
-                <div>
-                  <label className="label">Bed Length (ft)</label>
-                  <input
-                    type="number"
-                    className="input"
-                    value={form.bed_length_ft}
-                    onChange={(e) => update('bed_length_ft', e.target.value)}
-                    min="1"
-                    step="0.5"
-                    placeholder="8"
-                  />
-                </div>
-                {form.bed_layout !== 'single' && (
-                  <div>
-                    <label className="label">Path Width (ft)</label>
-                    <input
-                      type="number"
-                      className="input"
-                      value={form.path_width_ft}
-                      onChange={(e) => update('path_width_ft', e.target.value)}
-                      min="1"
-                      step="0.5"
-                      placeholder="3"
-                    />
-                  </div>
-                )}
-              </div>
-
-              {liveConfig && (
-                <div className="bg-amber-50 rounded-xl p-4 border border-amber-100 mb-4">
-                  <div className="flex items-start gap-4">
-                    <div className="flex-shrink-0">
-                      <BedPreview
-                        layoutId={form.bed_layout}
-                        bedWidthFt={form.bed_width_ft}
-                        bedLengthFt={form.bed_length_ft}
-                        pathWidthFt={form.path_width_ft}
-                      />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-amber-900 mb-1">Layout Preview</p>
-                      <p className="text-xs text-amber-700 mb-2">
-                        {liveConfig.beds.length} bed{liveConfig.beds.length > 1 ? 's' : ''} ·{' '}
-                        {liveConfig.total_width} × {liveConfig.total_length} ft total
-                      </p>
-                      <div className="space-y-0.5">
-                        {liveConfig.beds.map((bed) => (
-                          <div key={bed.id} className="text-xs text-amber-800">
-                            <span className="font-medium">{bed.label}:</span>{' '}
-                            {bed.width} × {bed.length} ft
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div>
-              <label className="label mb-3">Sun exposure</label>
-              <div className="grid grid-cols-3 gap-2">
-                {SUN_OPTIONS.map((s) => (
-                  <button
-                    key={s.id}
-                    onClick={() => update('sun_exposure', s.id)}
-                    className={`p-3 rounded-xl border-2 text-center transition-all ${
-                      form.sun_exposure === s.id
-                        ? 'border-garden-500 bg-garden-50'
-                        : 'border-gray-200 hover:border-garden-300'
-                    }`}
-                  >
-                    <div className="text-2xl mb-1">{s.emoji}</div>
-                    <div className="text-xs font-medium">{s.label}</div>
-                    <div className="text-xs text-gray-500">{s.desc}</div>
+                    {n}
                   </button>
                 ))}
               </div>
             </div>
 
-            <div>
-              <label className="label">Dimension notes (optional)</label>
-              <textarea
-                className="input resize-none"
-                rows={2}
-                value={form.dimensions_notes}
-                onChange={(e) => update('dimensions_notes', e.target.value)}
-                placeholder="e.g. East side gets an extra hour of morning sun..."
-              />
-            </div>
+            {form.num_areas > 1 && (
+              <div className="space-y-2">
+                <label className="label">Name your areas <span className="text-gray-400 font-normal">(optional)</span></label>
+                {form.areas.map((area, i) => (
+                  <input
+                    key={area.id}
+                    className="input"
+                    value={area.name}
+                    onChange={e => updateArea(i, { name: e.target.value })}
+                    placeholder={`Area ${i + 1} — e.g. Backyard Beds, Front Porch, Side Yard`}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         )}
 
-        {/* Step 2: Dimensions (non-raised-bed) */}
-        {step === 2 && form.garden_type !== 'raised_bed' && (
-          <div className="space-y-5">
-            <h2 className="font-semibold text-gray-800">How big is your garden?</h2>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="label">Width (ft)</label>
-                <input
-                  type="number"
-                  className="input"
-                  value={form.width_ft}
-                  onChange={(e) => update('width_ft', e.target.value)}
-                  placeholder="e.g. 4"
-                  min="1"
-                  step="0.5"
-                />
-              </div>
-              <div>
-                <label className="label">Length (ft)</label>
-                <input
-                  type="number"
-                  className="input"
-                  value={form.length_ft}
-                  onChange={(e) => update('length_ft', e.target.value)}
-                  placeholder="e.g. 8"
-                  min="1"
-                  step="0.5"
-                />
-              </div>
-            </div>
-
-            {form.width_ft && form.length_ft && (
-              <div className="bg-garden-50 rounded-lg p-3 text-sm text-garden-800">
-                📐 Total area: <strong>{(form.width_ft * form.length_ft).toFixed(1)} sq ft</strong>
+        {/* ── Step 2: Area config ─────────────────────────────────────────── */}
+        {step === 2 && currentArea && (
+          <>
+            {/* Area indicator when multiple areas */}
+            {form.num_areas > 1 && (
+              <div className="flex gap-1.5 mb-5">
+                {form.areas.map((a, i) => (
+                  <div key={a.id} className={`h-1.5 flex-1 rounded-full transition-all ${
+                    i < areaIndex ? 'bg-garden-500'
+                    : i === areaIndex ? 'bg-garden-400'
+                    : 'bg-gray-200'
+                  }`} />
+                ))}
               </div>
             )}
 
-            <div>
-              <label className="label mb-3">Sun exposure</label>
-              <div className="grid grid-cols-3 gap-2">
-                {SUN_OPTIONS.map((s) => (
-                  <button
-                    key={s.id}
-                    onClick={() => update('sun_exposure', s.id)}
-                    className={`p-3 rounded-xl border-2 text-center transition-all ${
-                      form.sun_exposure === s.id
-                        ? 'border-garden-500 bg-garden-50'
-                        : 'border-gray-200 hover:border-garden-300'
-                    }`}
-                  >
-                    <div className="text-2xl mb-1">{s.emoji}</div>
-                    <div className="text-xs font-medium">{s.label}</div>
-                    <div className="text-xs text-gray-500">{s.desc}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
+            {/* Sub-step 0: Types + quantities ──────────────────────────── */}
+            {areaSubStep === 0 && (
+              <div className="space-y-4">
+                <div>
+                  <h2 className="font-semibold text-gray-800 mb-1">
+                    {form.num_areas > 1 ? `${currentArea.name}: ` : ''}What type{' '}
+                    {form.num_areas === 1 ? 'of garden' : 'of gardens'}?
+                  </h2>
+                  <p className="text-sm text-gray-500 mb-4">
+                    Select all that apply and set the quantity of each.
+                  </p>
+                </div>
 
-            <div>
-              <label className="label">Dimension notes (optional)</label>
-              <textarea
-                className="input resize-none"
-                rows={2}
-                value={form.dimensions_notes}
-                onChange={(e) => update('dimensions_notes', e.target.value)}
-                placeholder="e.g. East side gets an extra hour of morning sun..."
-              />
-            </div>
-          </div>
+                <div className="space-y-2">
+                  {GARDEN_TYPES.map(type => {
+                    const sel        = currentArea.type_selections.find(s => s.type_id === type.id);
+                    const isSelected = !!sel;
+                    return (
+                      <div
+                        key={type.id}
+                        className={`rounded-xl border-2 overflow-hidden transition-all ${
+                          isSelected ? 'border-garden-500 bg-garden-50' : 'border-gray-200'
+                        }`}
+                      >
+                        <button
+                          className="w-full flex items-center gap-3 p-3 text-left"
+                          onClick={() => toggleType(areaIndex, type.id)}
+                        >
+                          <span className="text-2xl">{type.emoji}</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium text-sm text-gray-900">{type.label}</div>
+                            <div className="text-xs text-gray-500 truncate">{type.desc}</div>
+                          </div>
+                          <div className={`w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-all ${
+                            isSelected ? 'bg-garden-500 border-garden-500' : 'border-gray-300'
+                          }`}>
+                            {isSelected && <span className="text-white text-xs leading-none">✓</span>}
+                          </div>
+                        </button>
+
+                        {isSelected && (
+                          <div className="flex items-center px-4 pb-3 gap-3 border-t border-garden-100">
+                            <span className="text-xs text-gray-600 font-medium">How many?</span>
+                            <div className="flex items-center gap-2 ml-auto">
+                              <button
+                                onClick={() => setQty(areaIndex, type.id, sel.quantity - 1)}
+                                disabled={sel.quantity <= 1}
+                                className="w-7 h-7 rounded-full border border-gray-300 flex items-center justify-center text-gray-700 hover:bg-gray-100 disabled:opacity-30 text-sm font-bold"
+                              >−</button>
+                              <span className="w-6 text-center font-bold text-gray-800 text-sm">{sel.quantity}</span>
+                              <button
+                                onClick={() => setQty(areaIndex, type.id, sel.quantity + 1)}
+                                className="w-7 h-7 rounded-full border border-gray-300 flex items-center justify-center text-gray-700 hover:bg-gray-100 text-sm font-bold"
+                              >+</button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {totalUnitsInArea(currentArea) > 1 && (
+                  <div className="bg-blue-50 rounded-lg p-3 text-xs text-blue-700">
+                    💡 {totalUnitsInArea(currentArea)} units selected — you'll enter dimensions then
+                    arrange them visually on the next two screens.
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Sub-step 1: Dimensions (enter first, builder uses these for scale) */}
+            {areaSubStep === 1 && (
+              <div className="space-y-5">
+                <div>
+                  <h2 className="font-semibold text-gray-800 mb-1">
+                    {form.num_areas > 1 ? `${currentArea.name}: ` : ''}Dimensions
+                  </h2>
+                  <p className="text-sm text-gray-500">
+                    {currentArea.units.length === 1
+                      ? 'How big is this garden?'
+                      : 'Enter each unit\'s dimensions — the layout builder uses these to draw to-scale shapes.'}
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  {currentArea.units.map(unit => {
+                    const c        = TYPE_COLORS[unit.type_id] || TYPE_COLORS.in_ground;
+                    const typeInfo = GARDEN_TYPES.find(t => t.id === unit.type_id);
+                    const sqft     = unit.width_ft && unit.length_ft
+                      ? (parseFloat(unit.width_ft) * parseFloat(unit.length_ft)).toFixed(1)
+                      : null;
+                    return (
+                      <div
+                        key={unit.id}
+                        className="rounded-xl border-2 p-4 space-y-3"
+                        style={{ borderColor: c.border, backgroundColor: c.bg + 'cc' }}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg">{typeInfo?.emoji}</span>
+                          <span className="font-semibold text-sm" style={{ color: c.text }}>{unit.label}</span>
+                          {sqft && (
+                            <span className="ml-auto text-xs font-medium" style={{ color: c.text }}>
+                              📐 {sqft} sq ft
+                            </span>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="label text-xs">Width (ft)</label>
+                            <input
+                              type="number" className="input"
+                              value={unit.width_ft}
+                              onChange={e => updateUnit(areaIndex, unit.id, { width_ft: e.target.value })}
+                              placeholder="e.g. 4" min="0.5" step="0.5"
+                            />
+                          </div>
+                          <div>
+                            <label className="label text-xs">Length (ft)</label>
+                            <input
+                              type="number" className="input"
+                              value={unit.length_ft}
+                              onChange={e => updateUnit(areaIndex, unit.id, { length_ft: e.target.value })}
+                              placeholder="e.g. 8" min="0.5" step="0.5"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div>
+                  <label className="label mb-3">Sun exposure</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {SUN_OPTIONS.map(s => (
+                      <button
+                        key={s.id}
+                        onClick={() => updateArea(areaIndex, { sun_exposure: s.id })}
+                        className={`p-3 rounded-xl border-2 text-center transition-all ${
+                          currentArea.sun_exposure === s.id
+                            ? 'border-garden-500 bg-garden-50'
+                            : 'border-gray-200 hover:border-garden-300'
+                        }`}
+                      >
+                        <div className="text-2xl mb-1">{s.emoji}</div>
+                        <div className="text-xs font-medium">{s.label}</div>
+                        <div className="text-xs text-gray-500">{s.desc}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="label">Dimension notes (optional)</label>
+                  <textarea
+                    className="input resize-none" rows={2}
+                    value={currentArea.dimensions_notes}
+                    onChange={e => updateArea(areaIndex, { dimensions_notes: e.target.value })}
+                    placeholder="e.g. East side gets an extra hour of morning sun..."
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Sub-step 2: Builder ──────────────────────────────────────── */}
+            {areaSubStep === 2 && (
+              <div className="space-y-4">
+                <div>
+                  <h2 className="font-semibold text-gray-800 mb-1">
+                    {form.num_areas > 1 ? `${currentArea.name}: ` : ''}Arrange your layout
+                  </h2>
+                  <p className="text-sm text-gray-500">
+                    Drag each piece into roughly the right position. This is a spatial diagram,
+                    not an exact map — close enough is perfect.
+                  </p>
+                </div>
+
+                <GardenBuilder
+                  units={currentArea.units}
+                  onLayoutChange={positions => {
+                    setForm(f => {
+                      const areas = [...f.areas];
+                      areas[areaIndex] = {
+                        ...areas[areaIndex],
+                        units: areas[areaIndex].units.map(u => ({
+                          ...u,
+                          x: positions[u.id]?.x ?? u.x,
+                          y: positions[u.id]?.y ?? u.y,
+                        })),
+                      };
+                      return { ...f, areas };
+                    });
+                  }}
+                />
+              </div>
+            )}
+          </>
         )}
 
-        {/* Step 3: Preferences */}
+        {/* ── Step 3: Preferences ─────────────────────────────────────────── */}
         {step === 3 && (
           <div className="space-y-5">
             <h2 className="font-semibold text-gray-800">Garden preferences</h2>
@@ -606,7 +773,7 @@ export default function GardenWizard() {
             <div>
               <label className="label">Irrigation method</label>
               <div className="grid grid-cols-2 gap-2">
-                {IRRIGATION_OPTIONS.map((irr) => (
+                {IRRIGATION_OPTIONS.map(irr => (
                   <button
                     key={irr.id}
                     onClick={() => update('irrigation_type', irr.id)}
@@ -629,61 +796,45 @@ export default function GardenWizard() {
               <div className="grid grid-cols-2 gap-2">
                 <button
                   onClick={() => update('has_fencing', true)}
-                  className={`p-3 rounded-xl border-2 flex items-center justify-center gap-2 transition-all ${
-                    form.has_fencing === true
-                      ? 'border-garden-500 bg-garden-50'
-                      : 'border-gray-200 hover:border-garden-300'
+                  className={`p-3 rounded-xl border-2 flex items-center justify-center transition-all ${
+                    form.has_fencing === true ? 'border-garden-500 bg-garden-50' : 'border-gray-200 hover:border-garden-300'
                   }`}
-                >
-                  <span className="text-sm font-medium">Yes</span>
-                </button>
+                ><span className="text-sm font-medium">Yes</span></button>
                 <button
                   onClick={() => update('has_fencing', false)}
-                  className={`p-3 rounded-xl border-2 flex items-center justify-center gap-2 transition-all ${
-                    form.has_fencing === false
-                      ? 'border-garden-500 bg-garden-50'
-                      : 'border-gray-200 hover:border-garden-300'
+                  className={`p-3 rounded-xl border-2 flex items-center justify-center transition-all ${
+                    form.has_fencing === false ? 'border-garden-500 bg-garden-50' : 'border-gray-200 hover:border-garden-300'
                   }`}
-                >
-                  <span className="text-sm font-medium">No</span>
-                </button>
+                ><span className="text-sm font-medium">No</span></button>
               </div>
             </div>
 
             <div>
               <label className="label">Notes (optional)</label>
               <textarea
-                className="input resize-none"
-                rows={3}
+                className="input resize-none" rows={3}
                 value={form.notes}
-                onChange={(e) => update('notes', e.target.value)}
+                onChange={e => update('notes', e.target.value)}
                 placeholder="Anything else about your garden space..."
               />
             </div>
           </div>
         )}
 
-        {/* Step 4: Photo */}
+        {/* ── Step 4: Photo ───────────────────────────────────────────────── */}
         {step === 4 && (
           <div className="space-y-4">
             <h2 className="font-semibold text-gray-800">Add a reference photo</h2>
             <p className="text-sm text-gray-500">
               Optional — upload a photo of your garden space to reference while planning.
             </p>
-
             {form.photoPreview ? (
               <div className="relative">
-                <img
-                  src={form.photoPreview}
-                  alt="Garden preview"
-                  className="w-full h-48 object-cover rounded-xl"
-                />
+                <img src={form.photoPreview} alt="Garden preview" className="w-full h-48 object-cover rounded-xl" />
                 <button
                   onClick={() => { update('photo', null); update('photoPreview', null); }}
                   className="absolute top-2 right-2 bg-white rounded-full w-8 h-8 flex items-center justify-center text-gray-600 hover:text-red-500 shadow"
-                >
-                  ✕
-                </button>
+                >✕</button>
               </div>
             ) : (
               <button
@@ -695,48 +846,28 @@ export default function GardenWizard() {
                 <span className="text-xs">JPG, PNG, or HEIC up to 10MB</span>
               </button>
             )}
-
-            <input
-              ref={photoRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={handlePhotoChange}
-            />
-
+            <input ref={photoRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
             <div className="bg-blue-50 rounded-lg p-3 text-sm text-blue-700">
               💡 You can also skip this and add a photo later from your garden page.
             </div>
           </div>
         )}
 
-        {/* Navigation */}
+        {/* ── Navigation ──────────────────────────────────────────────────── */}
         <div className="flex gap-3 mt-8">
           {step > 0 && (
-            <button
-              onClick={() => { setStep(s => s - 1); setError(''); }}
-              className="btn-secondary flex-1"
-            >
-              ← Back
-            </button>
+            <button onClick={handleBack} className="btn-secondary flex-1">← Back</button>
           )}
-          {step < STEPS.length - 1 ? (
-            <button
-              onClick={() => {
-                if (canAdvance()) { setStep(s => s + 1); setError(''); }
-                else { setError('Please complete this step first'); }
-              }}
-              className="btn-primary flex-1"
-            >
-              Continue →
+          {step === 4 ? (
+            <button onClick={handleSubmit} disabled={saving} className="btn-primary flex-1 disabled:opacity-50">
+              {saving ? '🌱 Creating garden...' : '🌱 Create Garden'}
             </button>
           ) : (
             <button
-              onClick={handleSubmit}
-              disabled={saving}
-              className="btn-primary flex-1 disabled:opacity-50"
+              onClick={() => { if (canAdvance()) handleNext(); else setError('Please complete this step first'); }}
+              className="btn-primary flex-1"
             >
-              {saving ? '🌱 Creating garden...' : '🌱 Create Garden'}
+              Continue →
             </button>
           )}
         </div>
