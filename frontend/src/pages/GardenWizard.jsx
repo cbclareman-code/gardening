@@ -410,7 +410,11 @@ export default function GardenWizard() {
     if (step === 1) return form.num_areas >= 1;
     if (step === 2 && currentArea) {
       if (areaSubStep === 0) return currentArea.type_selections.length > 0;
-      if (areaSubStep === 1) return currentArea.units.every(u => Number(u.width_ft) > 0 && Number(u.length_ft) > 0);
+      if (areaSubStep === 1) {
+        // When syncing, only unit 1 needs to be filled — others mirror it
+        const unitsToCheck = syncDims ? [currentArea.units[0]] : currentArea.units;
+        return unitsToCheck.every(u => u && Number(u.width_ft) > 0 && Number(u.length_ft) > 0);
+      }
       return true; // builder is optional
     }
     return true;
@@ -709,7 +713,21 @@ export default function GardenWizard() {
                 {currentArea.units.length > 1 && (
                   <button
                     type="button"
-                    onClick={() => setSyncDims(v => !v)}
+                    onClick={() => {
+                      const turningOn = !syncDims;
+                      setSyncDims(turningOn);
+                      // When turning sync on, immediately copy unit 1's current values to all units
+                      if (turningOn && currentArea.units.length > 1) {
+                        const first = currentArea.units[0];
+                        updateArea(areaIndex, {
+                          units: currentArea.units.map(u => ({
+                            ...u,
+                            width_ft:  first.width_ft,
+                            length_ft: first.length_ft,
+                          })),
+                        });
+                      }
+                    }}
                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-sm font-medium transition-all ${
                       syncDims
                         ? 'border-garden-500 bg-garden-50 text-garden-700'
