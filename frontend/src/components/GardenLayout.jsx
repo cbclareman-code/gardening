@@ -1,191 +1,156 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 
-const CELL_SIZE = 48; // pixels per foot
-
-// Same color scheme as GardenWizard builder
 const TYPE_COLORS = {
-  raised_bed:   { bg: '#fef3c7', border: '#d97706', text: '#92400e' },
-  in_ground:    { bg: '#dcfce7', border: '#16a34a', text: '#14532d' },
-  container:    { bg: '#dbeafe', border: '#2563eb', text: '#1e3a8a' },
-  vertical:     { bg: '#f3e8ff', border: '#9333ea', text: '#581c87' },
-  hugelkultur:  { bg: '#fce7f3', border: '#db2777', text: '#831843' },
-  straw_bale:   { bg: '#fff7ed', border: '#ea580c', text: '#7c2d12' },
-  greenhouse:   { bg: '#f0fdf4', border: '#15803d', text: '#052e16' },
-};
-const BUILDER_SCALE = 14; // px per foot, matches wizard builder
-const COMPANION_PAIRS = {
-  'Tomato': ['Basil', 'Marigold', 'Carrot'],
-  'Basil': ['Tomato', 'Pepper'],
-  'Carrot': ['Tomato', 'Onion', 'Lettuce'],
-  'Marigold': ['Tomato', 'Pepper', 'Squash'],
-  'Cucumber': ['Radish', 'Beans', 'Peas'],
-  'Strawberry': ['Lettuce', 'Spinach', 'Thyme'],
+  raised_bed:   { bg: '#fef3c7', border: '#d97706', text: '#92400e', pill: '#d97706' },
+  in_ground:    { bg: '#dcfce7', border: '#16a34a', text: '#14532d', pill: '#16a34a' },
+  container:    { bg: '#dbeafe', border: '#2563eb', text: '#1e3a8a', pill: '#2563eb' },
+  vertical:     { bg: '#f3e8ff', border: '#9333ea', text: '#581c87', pill: '#9333ea' },
+  hugelkultur:  { bg: '#fce7f3', border: '#db2777', text: '#831843', pill: '#db2777' },
+  straw_bale:   { bg: '#fff7ed', border: '#ea580c', text: '#7c2d12', pill: '#ea580c' },
+  greenhouse:   { bg: '#f0fdf4', border: '#15803d', text: '#052e16', pill: '#15803d' },
 };
 
-function isCompanion(nameA, nameB) {
-  return (COMPANION_PAIRS[nameA]?.includes(nameB)) || (COMPANION_PAIRS[nameB]?.includes(nameA));
-}
+const TYPE_LABELS = {
+  raised_bed: 'Raised Bed', in_ground: 'In-Ground', container: 'Container',
+  vertical: 'Vertical', hugelkultur: 'Hugelkultur', straw_bale: 'Straw Bale', greenhouse: 'Greenhouse',
+};
 
-// Single-bed sequential layout
-function generateLayout(plants, widthFt, lengthFt) {
-  if (!plants || plants.length === 0) return [];
-  const cols = Math.max(Math.floor(widthFt || 8), 1);
+// ── Area carousel (v2 layout_data with units) ────────────────────────────────
+function AreaCarousel({ units, plants, layoutData, onPlantRemove }) {
+  const { plant_assignments = null, summary = null } = layoutData || {};
 
-  const placed = [];
-  let col = 0, row = 0;
+  // Build plant lookup by plant_id (the plants table PK)
+  const plantById = {};
+  plants.forEach(p => { plantById[p.plant_id] = p; });
 
-  for (const gp of plants) {
-    const sqFt = Math.max(1, Math.round((gp.spacing_inches || 12) / 12));
-    placed.push({ ...gp, col, row, sqFt });
-    col += sqFt;
-    if (col >= cols) { col = 0; row += 1; }
-  }
-  return placed;
-}
-
-// Multi-bed layout: distribute plants across beds in order
-function generateMultiBedLayout(plants, beds) {
-  if (!plants || plants.length === 0 || !beds || beds.length === 0) return [];
-
-  const placed = [];
-  let bedIdx = 0;
-  let col = 0;
-  let row = 0;
-
-  for (const gp of plants) {
-    const sqFt = Math.max(1, Math.round((gp.spacing_inches || 12) / 12));
-
-    // Try to fit in current bed
-    let bed = beds[Math.min(bedIdx, beds.length - 1)];
-    const bedCols = Math.max(Math.floor(bed.width), 1);
-    const bedRows = Math.max(Math.floor(bed.length), 1);
-
-    // Move to next row if needed
-    if (col + sqFt > bedCols) {
-      col = 0;
-      row += 1;
-    }
-    // Move to next bed if current bed is full
-    if (row >= bedRows && bedIdx < beds.length - 1) {
-      bedIdx += 1;
-      col = 0;
-      row = 0;
-      bed = beds[bedIdx];
-    }
-
-    placed.push({
-      ...gp,
-      col: bed.x + col,
-      row: bed.y + row,
-      sqFt,
-      bedId: bed.id,
-    });
-    col += sqFt;
-  }
-  return placed;
-}
-
-// Builder-familiar layout: renders garden units as colored boxes (v2 layout_data)
-function UnitBasedLayout({ units, plants, onPlantRemove }) {
-  const containerRef = useRef();
-  const [scale, setScale] = useState(1);
-
-  // Compute bounding box from unit pixel positions
-  const maxRight  = Math.max(...units.map(u => (u.x ?? 12) + Math.max((parseFloat(u.width_ft)  || 3) * BUILDER_SCALE, 38)), 200);
-  const maxBottom = Math.max(...units.map(u => (u.y ?? 12) + Math.max((parseFloat(u.length_ft) || 3) * BUILDER_SCALE, 26)), 160);
-  const canvasW = maxRight  + 20;
-  const canvasH = maxBottom + 20;
-
-  // Scale to fit container
-  useEffect(() => {
-    if (containerRef.current) {
-      const cw = containerRef.current.clientWidth;
-      setScale(cw < canvasW ? cw / canvasW : 1);
-    }
-  }, [canvasW]);
-
-  // Distribute plants evenly across units
+  // Resolve unit → plant list
   const plantsByUnit = {};
-  units.forEach(u => { plantsByUnit[u.id] = []; });
-  plants.forEach((p, i) => {
-    const u = units[i % units.length];
-    if (u) plantsByUnit[u.id].push(p);
+  if (plant_assignments && Object.keys(plant_assignments).length > 0) {
+    // AI-assigned
+    for (const [uid, ids] of Object.entries(plant_assignments)) {
+      plantsByUnit[Number(uid)] = ids.map(id => plantById[id]).filter(Boolean);
+    }
+    // Any units not in assignments get empty list
+    units.forEach(u => { if (!plantsByUnit[u.id]) plantsByUnit[u.id] = []; });
+  } else {
+    // Fallback: round-robin distribution
+    units.forEach(u => { plantsByUnit[u.id] = []; });
+    plants.forEach((p, i) => {
+      const u = units[i % units.length];
+      if (u) plantsByUnit[u.id].push(p);
+    });
+  }
+
+  // Group units by area_name, preserving insertion order
+  const areaOrder = [];
+  const areaMap = {};
+  units.forEach(u => {
+    const key = u.area_name || 'Garden';
+    if (!areaMap[key]) { areaMap[key] = []; areaOrder.push(key); }
+    areaMap[key].push(u);
   });
 
+  const hasAssignments = plant_assignments && Object.keys(plant_assignments).length > 0;
+
   return (
-    <div className="space-y-4">
-      <div className="text-sm text-gray-500">
-        📐 {units.length} unit{units.length !== 1 ? 's' : ''} · {plants.length} plant variet{plants.length !== 1 ? 'ies' : 'y'}
-        <span className="ml-3 text-xs text-gray-400">This is your garden as you designed it</span>
-      </div>
+    <div className="space-y-5">
+      {/* Unassigned notice */}
+      {!hasAssignments && plants.length > 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-sm text-blue-800">
+          Plants are distributed evenly across units below. Use <strong>Get AI Plant Plan</strong> for an optimized, space-aware assignment.
+        </div>
+      )}
 
-      <div ref={containerRef} className="overflow-x-auto rounded-xl border border-gray-200 bg-gray-50">
-        <div
-          className="relative select-none"
-          style={{ width: canvasW * scale, height: canvasH * scale, minHeight: 120 }}
-        >
-          {/* Grid background */}
-          <svg
-            className="absolute inset-0 pointer-events-none"
-            width={canvasW * scale}
-            height={canvasH * scale}
-          >
-            <defs>
-              <pattern id="layout-grid" width={7 * 2 * scale} height={7 * 2 * scale} patternUnits="userSpaceOnUse">
-                <path
-                  d={`M ${7 * 2 * scale} 0 L 0 0 0 ${7 * 2 * scale}`}
-                  fill="none" stroke="#e5e7eb" strokeWidth="0.5"
-                />
-              </pattern>
-            </defs>
-            <rect width={canvasW * scale} height={canvasH * scale} fill="url(#layout-grid)" />
-          </svg>
-
-          {units.map(u => {
-            const x = (u.x ?? 12) * scale;
-            const y = (u.y ?? 12) * scale;
-            const w = Math.max((parseFloat(u.width_ft)  || 3) * BUILDER_SCALE, 38) * scale;
-            const h = Math.max((parseFloat(u.length_ft) || 3) * BUILDER_SCALE, 26) * scale;
-            const c = TYPE_COLORS[u.type_id] || TYPE_COLORS.in_ground;
-            const unitPlants = plantsByUnit[u.id] || [];
+      {/* Horizontal carousel */}
+      <div className="overflow-x-auto pb-3 -mx-1 px-1">
+        <div className="flex gap-5" style={{ width: 'max-content' }}>
+          {areaOrder.map(areaName => {
+            const areaUnits = areaMap[areaName];
             return (
-              <div
-                key={u.id}
-                className="absolute rounded-lg border-2 overflow-hidden"
-                style={{ left: x, top: y, width: w, height: h, backgroundColor: c.bg, borderColor: c.border }}
-              >
-                <div
-                  className="text-xs font-bold px-1.5 pt-1 leading-tight truncate"
-                  style={{ color: c.text, fontSize: Math.max(9, 11 * scale) }}
-                >
-                  {u.label}
-                </div>
-                {unitPlants.length > 0 && (
-                  <div className="flex flex-wrap gap-0.5 px-1.5 pt-0.5">
-                    {unitPlants.map(p => (
-                      <span
-                        key={p.id}
-                        title={p.name}
-                        style={{ fontSize: Math.max(12, 16 * scale) }}
-                        className="leading-none cursor-default"
-                      >
-                        {p.emoji}
-                      </span>
-                    ))}
+              <div key={areaName} className="flex-shrink-0 w-64 space-y-3">
+                {/* Area header — only show when there are multiple areas */}
+                {areaOrder.length > 1 && (
+                  <div className="text-xs font-bold text-gray-500 uppercase tracking-wider border-b border-gray-200 pb-1.5">
+                    {areaName}
                   </div>
                 )}
+
+                {areaUnits.map(u => {
+                  const c = TYPE_COLORS[u.type_id] || TYPE_COLORS.in_ground;
+                  const unitPlants = plantsByUnit[u.id] || [];
+                  const sqft = (parseFloat(u.width_ft) || 0) * (parseFloat(u.length_ft) || 0);
+
+                  return (
+                    <div key={u.id} className="rounded-xl border-2 overflow-hidden shadow-sm" style={{ borderColor: c.border }}>
+                      {/* Unit header */}
+                      <div className="px-3 py-2 flex items-center gap-2" style={{ backgroundColor: c.bg }}>
+                        <span className="font-semibold text-sm flex-1" style={{ color: c.text }}>
+                          {u.label}
+                        </span>
+                        <span className="text-xs rounded-full px-1.5 py-0.5 bg-white/60 font-medium" style={{ color: c.text }}>
+                          {TYPE_LABELS[u.type_id] || u.type_id}
+                        </span>
+                        {sqft > 0 && (
+                          <span className="text-xs font-medium" style={{ color: c.text, opacity: 0.7 }}>
+                            {sqft.toFixed(0)} sqft
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Plant list */}
+                      <div className="bg-white divide-y divide-gray-50 min-h-10">
+                        {unitPlants.length === 0 ? (
+                          <p className="text-xs text-gray-400 italic px-3 py-3">No plants assigned</p>
+                        ) : (
+                          unitPlants.map(p => (
+                            <div key={p.id || p.plant_id} className="flex items-center gap-2 px-3 py-2 group hover:bg-gray-50">
+                              <span className="text-lg leading-none flex-shrink-0">{p.emoji}</span>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-medium text-gray-800 truncate">{p.name}</div>
+                                <div className="text-xs text-gray-400 flex gap-2">
+                                  {p.spacing_inches && <span>{p.spacing_inches}" apart</span>}
+                                  {p.days_to_maturity && <span>{p.days_to_maturity}d</span>}
+                                </div>
+                              </div>
+                              {onPlantRemove && (
+                                <button
+                                  onClick={() => onPlantRemove(p)}
+                                  className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-opacity text-sm flex-shrink-0"
+                                  title={`Remove ${p.name}`}
+                                >✕</button>
+                              )}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             );
           })}
         </div>
       </div>
 
-      {/* Plant legend with remove */}
+      {/* Strategy summary */}
+      {summary && (
+        <div className="bg-garden-50 border border-garden-200 rounded-xl p-4 space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">🌱</span>
+            <h4 className="font-semibold text-garden-800 text-sm">Planting Strategy</h4>
+          </div>
+          <div className="text-sm text-garden-800 leading-relaxed whitespace-pre-line">
+            {summary}
+          </div>
+        </div>
+      )}
+
+      {/* Legend */}
       {plants.length > 0 && (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 pt-1">
           {plants.map(p => (
             <div
-              key={p.id}
+              key={p.id || p.plant_id}
               className="flex items-center gap-1.5 text-xs bg-white border border-gray-200 rounded-full px-2.5 py-1 group"
             >
               <span>{p.emoji}</span>
@@ -194,9 +159,7 @@ function UnitBasedLayout({ units, plants, onPlantRemove }) {
                 <button
                   onClick={() => onPlantRemove(p)}
                   className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 ml-0.5 transition-opacity"
-                >
-                  ✕
-                </button>
+                >✕</button>
               )}
             </div>
           ))}
@@ -206,180 +169,88 @@ function UnitBasedLayout({ units, plants, onPlantRemove }) {
   );
 }
 
-// Wrapper: routes to the right layout renderer based on layout_data version
+// ── Main export ───────────────────────────────────────────────────────────────
 export default function GardenLayout({ garden, plants, onPlantRemove }) {
-  const layoutConfig = (() => {
-    if (garden?.layout_data) {
-      try { return JSON.parse(garden.layout_data); } catch { return null; }
-    }
-    return null;
-  })();
+  let layoutData = null;
+  try { layoutData = garden?.layout_data ? JSON.parse(garden.layout_data) : null; } catch {}
 
-  if (layoutConfig?.version === 2 && layoutConfig?.units?.length > 0) {
+  if (layoutData?.version === 2 && layoutData?.units?.length > 0) {
     if (!plants || plants.length === 0) {
       return (
         <div className="flex flex-col items-center justify-center py-16 text-gray-400">
           <div className="text-5xl mb-3">🌾</div>
           <p className="font-medium">No plants yet</p>
-          <p className="text-sm mt-1">Add plants from the Plants tab to see them placed in your garden</p>
+          <p className="text-sm mt-1">Use <strong>Get AI Plant Plan</strong> or browse plants manually</p>
         </div>
       );
     }
     return (
-      <UnitBasedLayout
-        units={layoutConfig.units}
+      <AreaCarousel
+        units={layoutData.units}
         plants={plants}
+        layoutData={layoutData}
         onPlantRemove={onPlantRemove}
       />
     );
   }
 
-  return <CanvasGardenLayout garden={garden} plants={plants} onPlantRemove={onPlantRemove} />;
+  // Fallback for gardens without v2 layout_data
+  return <LegacyLayout garden={garden} plants={plants} onPlantRemove={onPlantRemove} />;
 }
 
-function CanvasGardenLayout({ garden, plants, onPlantRemove }) {
-  const canvasRef = useRef();
+// ── Legacy canvas layout (gardens without unit-based layout_data) ─────────────
+function LegacyLayout({ garden, plants, onPlantRemove }) {
+  const canvasRef  = useRef();
   const containerRef = useRef();
-  const [hoveredPlant, setHoveredPlant] = useState(null);
   const [scale, setScale] = useState(1);
+  const [hoveredPlant, setHoveredPlant] = useState(null);
 
-  const layoutConfig = (() => {
-    if (garden?.layout_data) {
-      try { return JSON.parse(garden.layout_data); } catch { return null; }
-    }
-    return null;
-  })();
+  const CELL = 48;
+  const widthFt  = garden?.width_ft  || 8;
+  const lengthFt = garden?.length_ft || 4;
+  const canvasW  = widthFt  * CELL;
+  const canvasH  = lengthFt * CELL;
 
-  const hasBeds = layoutConfig?.beds?.length > 1;
-  const beds = layoutConfig?.beds || null;
-
-  const widthFt = hasBeds ? layoutConfig.total_width : (garden?.width_ft || 8);
-  const lengthFt = hasBeds ? layoutConfig.total_length : (garden?.length_ft || 4);
-
-  const placed = hasBeds
-    ? generateMultiBedLayout(plants, beds)
-    : generateLayout(plants, widthFt, lengthFt);
-
-  const canvasWidth = widthFt * CELL_SIZE;
-  const canvasHeight = lengthFt * CELL_SIZE;
-
-  // Scale to fit container
   useEffect(() => {
     if (containerRef.current) {
-      const containerWidth = containerRef.current.clientWidth;
-      if (canvasWidth > containerWidth) {
-        setScale(containerWidth / canvasWidth);
-      } else {
-        setScale(1);
-      }
+      const cw = containerRef.current.clientWidth;
+      setScale(cw < canvasW ? cw / canvasW : 1);
     }
-  }, [canvasWidth]);
+  }, [canvasW]);
 
-  // Draw garden
+  const placed = (() => {
+    if (!plants || plants.length === 0) return [];
+    const cols = Math.max(Math.floor(widthFt), 1);
+    let col = 0, row = 0;
+    return plants.map(gp => {
+      const sqFt = Math.max(1, Math.round((gp.spacing_inches || 12) / 12));
+      const p = { ...gp, col, row, sqFt };
+      col += sqFt;
+      if (col >= cols) { col = 0; row += 1; }
+      return p;
+    });
+  })();
+
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas || !placed.length) return;
     const ctx = canvas.getContext('2d');
-    const w = widthFt * CELL_SIZE;
-    const h = lengthFt * CELL_SIZE;
-
-    canvas.width = w;
-    canvas.height = h;
-
-    if (hasBeds && beds) {
-      // Multi-bed: draw path background first, then individual beds
-      ctx.fillStyle = '#d6b49630'; // path/walkway color
-      ctx.fillRect(0, 0, w, h);
-
-      // Draw each bed
-      for (const bed of beds) {
-        const bx = bed.x * CELL_SIZE;
-        const by = bed.y * CELL_SIZE;
-        const bw = bed.width * CELL_SIZE;
-        const bh = bed.length * CELL_SIZE;
-
-        // Bed soil background
-        ctx.fillStyle = '#92400e18';
-        ctx.fillRect(bx, by, bw, bh);
-
-        // Bed border
-        ctx.strokeStyle = '#78350f60';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(bx, by, bw, bh);
-
-        // Grid lines within bed
-        ctx.strokeStyle = '#d6b89615';
-        ctx.lineWidth = 1;
-        for (let c = 0; c <= bed.width; c++) {
-          ctx.beginPath();
-          ctx.moveTo(bx + c * CELL_SIZE, by);
-          ctx.lineTo(bx + c * CELL_SIZE, by + bh);
-          ctx.stroke();
-        }
-        for (let r = 0; r <= bed.length; r++) {
-          ctx.beginPath();
-          ctx.moveTo(bx, by + r * CELL_SIZE);
-          ctx.lineTo(bx + bw, by + r * CELL_SIZE);
-          ctx.stroke();
-        }
-
-        // Bed label
-        ctx.font = 'bold 10px system-ui';
-        ctx.fillStyle = '#78350f90';
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'top';
-        ctx.fillText(bed.label, bx + 4, by + 4);
-      }
-    } else {
-      // Single bed: original background + grid
-      ctx.fillStyle = '#92400e18';
-      ctx.fillRect(0, 0, w, h);
-
-      ctx.strokeStyle = '#d6b89620';
-      ctx.lineWidth = 1;
-      for (let c = 0; c <= widthFt; c++) {
-        ctx.beginPath();
-        ctx.moveTo(c * CELL_SIZE, 0);
-        ctx.lineTo(c * CELL_SIZE, h);
-        ctx.stroke();
-      }
-      for (let r = 0; r <= lengthFt; r++) {
-        ctx.beginPath();
-        ctx.moveTo(0, r * CELL_SIZE);
-        ctx.lineTo(w, r * CELL_SIZE);
-        ctx.stroke();
-      }
+    canvas.width  = canvasW;
+    canvas.height = canvasH;
+    ctx.fillStyle = '#92400e18';
+    ctx.fillRect(0, 0, canvasW, canvasH);
+    ctx.strokeStyle = '#d6b89620';
+    ctx.lineWidth = 1;
+    for (let c = 0; c <= widthFt; c++) {
+      ctx.beginPath(); ctx.moveTo(c * CELL, 0); ctx.lineTo(c * CELL, canvasH); ctx.stroke();
     }
-
-    // Draw companion lines
-    for (let i = 0; i < placed.length; i++) {
-      for (let j = i + 1; j < placed.length; j++) {
-        if (isCompanion(placed[i].name, placed[j].name)) {
-          const ax = (placed[i].col + placed[i].sqFt / 2) * CELL_SIZE;
-          const ay = (placed[i].row + 0.5) * CELL_SIZE;
-          const bx = (placed[j].col + placed[j].sqFt / 2) * CELL_SIZE;
-          const by = (placed[j].row + 0.5) * CELL_SIZE;
-          ctx.beginPath();
-          ctx.setLineDash([4, 4]);
-          ctx.strokeStyle = '#22c55e50';
-          ctx.lineWidth = 1.5;
-          ctx.moveTo(ax, ay);
-          ctx.lineTo(bx, by);
-          ctx.stroke();
-          ctx.setLineDash([]);
-        }
-      }
+    for (let r = 0; r <= lengthFt; r++) {
+      ctx.beginPath(); ctx.moveTo(0, r * CELL); ctx.lineTo(canvasW, r * CELL); ctx.stroke();
     }
-
-    // Draw plants
     for (const p of placed) {
-      const x = p.col * CELL_SIZE;
-      const y = p.row * CELL_SIZE;
-      const size = Math.min(p.sqFt * CELL_SIZE - 4, CELL_SIZE - 4);
-      const cx = x + (p.sqFt * CELL_SIZE) / 2;
-      const cy = y + CELL_SIZE / 2;
-
-      // Plant circle background
+      const x = p.col * CELL, y = p.row * CELL;
+      const size = Math.min(p.sqFt * CELL - 4, CELL - 4);
+      const cx = x + (p.sqFt * CELL) / 2, cy = y + CELL / 2;
       ctx.beginPath();
       ctx.arc(cx, cy, size / 2 - 2, 0, Math.PI * 2);
       ctx.fillStyle = (p.color || '#4ade80') + '40';
@@ -387,132 +258,45 @@ function CanvasGardenLayout({ garden, plants, onPlantRemove }) {
       ctx.strokeStyle = p.color || '#4ade80';
       ctx.lineWidth = 2;
       ctx.stroke();
-
-      // Emoji
       ctx.font = `${Math.min(size * 0.45, 20)}px serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(p.emoji || '🌱', cx, cy);
-
-      // Name label
-      if (CELL_SIZE >= 40) {
-        ctx.font = `bold ${Math.min(size * 0.2, 9)}px system-ui`;
-        ctx.fillStyle = '#374151';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'top';
-        const label = p.name.length > 8 ? p.name.substring(0, 7) + '…' : p.name;
-        ctx.fillText(label, cx, y + CELL_SIZE - 13);
-      }
+      ctx.font = `bold ${Math.min(size * 0.2, 9)}px system-ui`;
+      ctx.fillStyle = '#374151';
+      ctx.textBaseline = 'top';
+      const label = p.name.length > 8 ? p.name.slice(0, 7) + '…' : p.name;
+      ctx.fillText(label, cx, y + CELL - 13);
     }
-  }, [placed, widthFt, lengthFt, beds, hasBeds, hoveredPlant]);
-
-  const handleCanvasClick = useCallback((e) => {
-    const rect = canvasRef.current.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / scale;
-    const y = (e.clientY - rect.top) / scale;
-    const col = Math.floor(x / CELL_SIZE);
-    const row = Math.floor(y / CELL_SIZE);
-    const clicked = placed.find(p => p.col <= col && col < p.col + p.sqFt && p.row === row);
-    if (clicked) setHoveredPlant(clicked);
-  }, [placed, scale]);
+  }, [placed, canvasW, canvasH, widthFt, lengthFt]);
 
   if (!plants || plants.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-gray-400">
         <div className="text-5xl mb-3">🌾</div>
         <p className="font-medium">No plants yet</p>
-        <p className="text-sm mt-1">Add plants from the Plants tab to see your layout</p>
       </div>
     );
   }
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between text-sm">
-        <div className="text-gray-600">
-          {hasBeds
-            ? `📐 ${beds.length} beds · ${widthFt} × ${lengthFt} ft total · ${plants.length} plant varieties`
-            : `📐 ${widthFt} × ${lengthFt} ft · ${plants.length} plant varieties`}
-        </div>
-        <div className="flex items-center gap-3 text-xs text-gray-500">
-          <span className="flex items-center gap-1">
-            <span className="w-3 h-px bg-green-400 inline-block border-dashed border-t border-green-400"></span>
-            companion pair
-          </span>
-        </div>
-      </div>
-
-      {hasBeds && (
-        <div className="flex flex-wrap gap-2 text-xs text-amber-700">
-          {beds.map(bed => (
-            <span key={bed.id} className="bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
-              {bed.label}: {bed.width} × {bed.length} ft
-            </span>
-          ))}
-        </div>
-      )}
-
       <div ref={containerRef} className="overflow-x-auto rounded-xl border border-gray-200 bg-amber-50/30">
-        <div style={{ transform: `scale(${scale})`, transformOrigin: 'top left', width: canvasWidth * scale, height: canvasHeight * scale }}>
-          <canvas
-            ref={canvasRef}
-            onClick={handleCanvasClick}
-            className="cursor-pointer"
-            style={{ display: 'block' }}
-          />
+        <div style={{ transform: `scale(${scale})`, transformOrigin: 'top left', width: canvasW * scale, height: canvasH * scale }}>
+          <canvas ref={canvasRef} style={{ display: 'block' }} />
         </div>
       </div>
-
-      {/* Legend */}
       <div className="flex flex-wrap gap-2">
         {plants.map(p => (
-          <div
-            key={p.id}
-            className="flex items-center gap-1.5 text-xs bg-white border border-gray-200 rounded-full px-2.5 py-1 group"
-          >
+          <div key={p.id || p.plant_id} className="flex items-center gap-1.5 text-xs bg-white border border-gray-200 rounded-full px-2.5 py-1 group">
             <span>{p.emoji}</span>
             <span className="text-gray-700">{p.name}</span>
             {onPlantRemove && (
-              <button
-                onClick={() => onPlantRemove(p)}
-                className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 ml-0.5 transition-opacity"
-              >
-                ✕
-              </button>
+              <button onClick={() => onPlantRemove(p)} className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 ml-0.5 transition-opacity">✕</button>
             )}
           </div>
         ))}
       </div>
-
-      {/* Clicked plant info */}
-      {hoveredPlant && (
-        <div className="card p-4 border-l-4 border-garden-500">
-          <div className="flex items-start justify-between">
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-2xl">{hoveredPlant.emoji}</span>
-                <span className="font-semibold">{hoveredPlant.name}</span>
-              </div>
-              {hoveredPlant.planting_tips && (
-                <p className="text-sm text-gray-600 mt-1">{hoveredPlant.planting_tips}</p>
-              )}
-              <div className="flex gap-3 mt-2 text-xs text-gray-500">
-                <span>⏱ {hoveredPlant.days_to_maturity}d to harvest</span>
-                <span>📏 {hoveredPlant.spacing_inches}" spacing</span>
-                {hoveredPlant.bedId && hasBeds && (
-                  <span>📍 {beds.find(b => b.id === hoveredPlant.bedId)?.label}</span>
-                )}
-              </div>
-            </div>
-            <button
-              onClick={() => setHoveredPlant(null)}
-              className="text-gray-400 hover:text-gray-600 text-sm"
-            >
-              ✕
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

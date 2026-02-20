@@ -7,9 +7,19 @@ const { authMiddleware } = require('../middleware/auth');
 const router = express.Router();
 router.use(authMiddleware);
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+// Zone → approximate spring/fall frost dates
+const FROST_DATES = {
+  '3':  { last: 'May 15',      first: 'September 1'  },
+  '4':  { last: 'May 1',       first: 'October 1'    },
+  '5':  { last: 'April 15',    first: 'October 15'   },
+  '6':  { last: 'April 1',     first: 'November 1'   },
+  '7':  { last: 'March 15',    first: 'November 15'  },
+  '8':  { last: 'March 1',     first: 'December 1'   },
+  '9':  { last: 'February 15', first: 'December 15'  },
+  '10': { last: 'January 31',  first: 'none (frost-free)' },
+};
 
 function buildSystemPrompt(garden, plants) {
   const plantList = plants.map(p =>
@@ -223,6 +233,143 @@ router.get('/history/:gardenId', async (req, res) => {
     res.json({ history });
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch history' });
+  }
+});
+
+// ── AI-generated planting recommendation ─────────────────────────────────────
+router.post('/recommend/:gardenId', async (req, res) => {
+  try {
+    const garden = db.prepare('SELECT * FROM gardens WHERE id = ? AND user_id = ?')
+      .get(req.params.gardenId, req.user.id);
+    if (!garden) return res.status(404).json({ error: 'Garden not found' });
+
+    let layoutData = {};
+    try { layoutData = JSON.parse(garden.layout_data || '{}'); } catch {}
+    const units = layoutData.units || [];
+    if (units.length === 0) {
+      return res.status(400).json({ error: 'No layout units found — complete the garden builder step first' });
+    }
+
+    const allPlants = db.prepare('SELECT * FROM plants ORDER BY name').all();
+    const zone = String(garden.hardiness_zone || '6');
+    const frost = FROST_DATES[zone] || FROST_DATES['6'];
+
+    const unitSummary = units.map(u => {
+      const sqft = ((parseFloat(u.width_ft) || 0) * (parseFloat(u.length_ft) || 0)).toFixed(0);
+      return `- Unit ${u.id} "${u.label}" [${u.type_id}] ${u.width_ft || '?'}ft × ${u.length_ft || '?'}ft (${sqft} sq ft), area: "${u.area_name || 'Main'}"`;
+    }).join('\n');
+
+    const plantCatalog = allPlants.map(p =>
+      `${p.name} (${p.category}, ${p.spacing_inches}" apart, ${p.days_to_maturity}d to maturity, sun: ${p.sun_requirement}, companions: ${p.companions || 'none'})`
+    ).join('\n');
+
+    const prompt = `You are an expert garden planner creating a personalized planting plan.
+
+GARDEN:
+- Name: ${garden.name}
+- Hardiness Zone: ${zone}
+- Last spring frost: ${frost.last} | First fall frost: ${frost.first}
+- Sun exposure: ${garden.sun_exposure}
+- Irrigation: ${garden.irrigation_type}
+- Fencing: ${garden.has_fencing ? 'Yes' : 'No'}
+- Notes: ${garden.notes || 'none'}
+
+GARDEN UNITS (assign plants to these):
+${unitSummary}
+
+PLANT CATALOG (choose from these only):
+${plantCatalog}
+
+TODAY: February 20, 2026
+
+TASK: Create an optimized planting plan. For each unit:
+1. Choose plants that fit the space (use spacing_inches to estimate count — 1 sq ft per spacing_inches/12 squared)
+2. Prioritize companion planting pairs within the same unit
+3. Match sun requirements to the garden's sun exposure
+4. Vary crop types across units for rotation
+5. For areas with multiple units of the same type, consider succession planting (same crop planted 2-3 weeks apart)
+
+Return ONLY valid JSON — no markdown, no preamble:
+{
+  "plant_assignments": {
+    "1": ["Tomato", "Basil"],
+    "2": ["Lettuce", "Carrot", "Radish"]
+  },
+  "summary": "3-5 paragraph written explanation covering: what's in each unit, why companion pairs were chosen, sun exposure reasoning, succession planting opportunities, and any cautions (antagonists, spacing)",
+  "planting_schedule": [
+    {
+      "plant_name": "Tomato",
+      "unit_id": 1,
+      "area_name": "My Garden",
+      "sow_indoors": "2026-03-15",
+      "transplant_outdoors": "2026-05-01",
+      "first_harvest": "2026-07-15",
+      "last_harvest": "2026-09-30",
+      "notes": "Start indoors 6-8 weeks before last frost"
+    }
+  ]
+}
+Omit "sow_indoors" for direct-sown crops. Use realistic 2026 dates.`;
+
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 3000,
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    const raw = response.content[0].text.trim();
+    // Strip any accidental markdown fences
+    const jsonText = raw.replace(/^```json?\n?/i, '').replace(/\n?```$/i, '');
+    let rec;
+    try {
+      rec = JSON.parse(jsonText);
+    } catch (e) {
+      console.error('Recommend JSON parse error:', jsonText.slice(0, 500));
+      return res.status(500).json({ error: 'AI returned unparseable response — please try again' });
+    }
+
+    const { plant_assignments = {}, summary = '', planting_schedule = [] } = rec;
+
+    // Resolve plant names → IDs; add new plants to garden_plants if not already there
+    const existingGP = db.prepare('SELECT plant_id FROM garden_plants WHERE garden_id = ?')
+      .all(req.params.gardenId);
+    const existingIds = new Set(existingGP.map(r => r.plant_id));
+
+    const assignmentIds = {}; // { unit_id: [plant_db_id, ...] }
+    for (const [uid, names] of Object.entries(plant_assignments)) {
+      assignmentIds[uid] = [];
+      for (const name of names) {
+        const plant = db.prepare("SELECT * FROM plants WHERE LOWER(name) LIKE LOWER(?) LIMIT 1")
+          .get(`%${name}%`);
+        if (!plant) continue;
+        assignmentIds[uid].push(plant.id);
+        if (!existingIds.has(plant.id)) {
+          db.prepare(
+            'INSERT INTO garden_plants (id, garden_id, plant_id, x_position, y_position, quantity) VALUES (?, ?, ?, 0, 0, 1)'
+          ).run(uuidv4(), req.params.gardenId, plant.id);
+          existingIds.add(plant.id);
+        }
+      }
+    }
+
+    // Save back into layout_data
+    const updatedLayout = { ...layoutData, plant_assignments: assignmentIds, summary, planting_schedule };
+    db.prepare("UPDATE gardens SET layout_data = ?, updated_at = datetime('now') WHERE id = ?")
+      .run(JSON.stringify(updatedLayout), req.params.gardenId);
+
+    const updatedGarden = db.prepare('SELECT * FROM gardens WHERE id = ?').get(req.params.gardenId);
+    const updatedPlants = db.prepare(`
+      SELECT gp.*, p.name, p.emoji, p.color, p.category, p.spacing_inches,
+             p.days_to_maturity, p.sun_requirement, p.companions, p.antagonists,
+             p.description, p.planting_tips
+      FROM garden_plants gp JOIN plants p ON gp.plant_id = p.id
+      WHERE gp.garden_id = ?
+    `).all(req.params.gardenId);
+
+    res.json({ garden: updatedGarden, plants: updatedPlants, summary, planting_schedule });
+  } catch (err) {
+    console.error('Recommend error:', err);
+    res.status(500).json({ error: 'Recommendation failed: ' + err.message });
   }
 });
 
