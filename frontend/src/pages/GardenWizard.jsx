@@ -191,7 +191,6 @@ function GardenBuilder({ units, onLayoutChange }) {
         Drag to arrange · shapes are proportional to the dimensions you entered
       </p>
     </div>
-    </div>
   );
 }
 
