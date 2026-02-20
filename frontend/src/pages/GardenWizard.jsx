@@ -44,9 +44,9 @@ function makeArea(index) {
     id: index + 1,
     name: `Area ${index + 1}`,
     type_selections: [], // [{ type_id, quantity }]
-    units: [],           // [{ id, type_id, label, width_ft, length_ft, x, y }]
+    units: [],           // [{ id, type_id, label, width_ft, length_ft, x, y, rotation }]
     sun_exposure: 'full_sun',
-    dimensions_notes: '',
+    syncDims: false,
     has_fencing: false,
     irrigation_type: 'hand',
   };
@@ -96,19 +96,38 @@ function unitPx(unit) {
   };
 }
 
+// Axis-aligned bounding box of a rotated rectangle
+function rotatedBounds(w, h, deg) {
+  const rad = (deg * Math.PI) / 180;
+  const cos = Math.abs(Math.cos(rad));
+  const sin = Math.abs(Math.sin(rad));
+  return { bw: w * cos + h * sin, bh: w * sin + h * cos };
+}
+
 function GardenBuilder({ units, onLayoutChange }) {
   const [pos, setPos] = useState(() => {
     const p = {};
     units.forEach(u => { p[u.id] = { x: u.x ?? 12, y: u.y ?? 12 }; });
     return p;
   });
+  const [rotations, setRotations] = useState(() => {
+    const r = {};
+    units.forEach(u => { r[u.id] = u.rotation ?? 0; });
+    return r;
+  });
+  const [selectedId, setSelectedId] = useState(null);
 
-  // If units list grows (e.g. user navigates back and forward) seed new ones
+  // Seed new units if the list grows
   useEffect(() => {
     setPos(prev => {
       const p = { ...prev };
       units.forEach(u => { if (!p[u.id]) p[u.id] = { x: 12 + u.id * 20, y: 12 }; });
       return p;
+    });
+    setRotations(prev => {
+      const r = { ...prev };
+      units.forEach(u => { if (r[u.id] === undefined) r[u.id] = u.rotation ?? 0; });
+      return r;
     });
   }, [units.length]);
 
@@ -118,6 +137,7 @@ function GardenBuilder({ units, onLayoutChange }) {
   const onPointerDown = (e, unitId) => {
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
+    setSelectedId(unitId);
     const rect = canvasRef.current.getBoundingClientRect();
     const cur = pos[unitId] || { x: 12, y: 12 };
     dragging.current = {
@@ -133,62 +153,110 @@ function GardenBuilder({ units, onLayoutChange }) {
     const { unitId, ox, oy } = dragging.current;
     const unit = units.find(u => u.id === unitId);
     const { w, h } = unitPx(unit);
-    const x = Math.max(0, Math.min(CVS_W - w, snapVal(e.clientX - rect.left - ox)));
-    const y = Math.max(0, Math.min(CVS_H - h, snapVal(e.clientY - rect.top  - oy)));
+    const { bw, bh } = rotatedBounds(w, h, rotations[unitId] ?? 0);
+    const x = Math.max(0, Math.min(CVS_W - bw, snapVal(e.clientX - rect.left - ox)));
+    const y = Math.max(0, Math.min(CVS_H - bh, snapVal(e.clientY - rect.top  - oy)));
     setPos(prev => ({ ...prev, [unitId]: { x, y } }));
   };
 
   const onPointerUp = () => {
     if (dragging.current) {
-      onLayoutChange(pos);
+      onLayoutChange(pos, rotations);
       dragging.current = null;
     }
   };
 
+  const handleRotate = (unitId) => {
+    setRotations(prev => {
+      const next = { ...prev, [unitId]: ((prev[unitId] ?? 0) + 45) % 360 };
+      onLayoutChange(pos, next);
+      return next;
+    });
+  };
+
   return (
     <div className="overflow-x-auto -mx-1">
-      <div
-        ref={canvasRef}
-        className="relative rounded-xl border-2 border-gray-200 bg-gray-50 overflow-hidden select-none touch-none"
-        style={{ width: CVS_W, height: CVS_H, minWidth: CVS_W }}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerLeave={onPointerUp}
-      >
-        {/* Grid lines */}
-        <svg className="absolute inset-0 pointer-events-none" width={CVS_W} height={CVS_H}>
-          <defs>
-            <pattern id="builder-grid" width={SNAP * 2} height={SNAP * 2} patternUnits="userSpaceOnUse">
-              <path d={`M ${SNAP * 2} 0 L 0 0 0 ${SNAP * 2}`} fill="none" stroke="#e5e7eb" strokeWidth="0.5" />
-            </pattern>
-          </defs>
-          <rect width={CVS_W} height={CVS_H} fill="url(#builder-grid)" />
-        </svg>
+      <div className="flex gap-3 items-start">
+        {/* Canvas */}
+        <div
+          ref={canvasRef}
+          className="relative rounded-xl border-2 border-gray-200 bg-gray-50 overflow-hidden select-none touch-none flex-shrink-0"
+          style={{ width: CVS_W, height: CVS_H }}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerLeave={onPointerUp}
+        >
+          {/* Grid lines */}
+          <svg className="absolute inset-0 pointer-events-none" width={CVS_W} height={CVS_H}>
+            <defs>
+              <pattern id="builder-grid" width={SNAP * 2} height={SNAP * 2} patternUnits="userSpaceOnUse">
+                <path d={`M ${SNAP * 2} 0 L 0 0 0 ${SNAP * 2}`} fill="none" stroke="#e5e7eb" strokeWidth="0.5" />
+              </pattern>
+            </defs>
+            <rect width={CVS_W} height={CVS_H} fill="url(#builder-grid)" />
+          </svg>
 
-        {/* Units */}
-        {units.map(unit => {
-          const p = pos[unit.id] || { x: 12, y: 12 };
-          const { w, h } = unitPx(unit);
-          const c = TYPE_COLORS[unit.type_id] || TYPE_COLORS.in_ground;
-          return (
-            <div
-              key={unit.id}
-              className="absolute rounded-lg border-2 flex items-center justify-center cursor-grab active:cursor-grabbing"
-              style={{ left: p.x, top: p.y, width: w, height: h, backgroundColor: c.bg, borderColor: c.border }}
-              onPointerDown={e => onPointerDown(e, unit.id)}
-            >
-              <span
-                className="text-xs font-semibold text-center px-1 leading-tight pointer-events-none"
-                style={{ color: c.text }}
+          {/* Units */}
+          {units.map(unit => {
+            const p   = pos[unit.id] || { x: 12, y: 12 };
+            const rot = rotations[unit.id] ?? 0;
+            const { w, h } = unitPx(unit);
+            const { bw, bh } = rotatedBounds(w, h, rot);
+            const c   = TYPE_COLORS[unit.type_id] || TYPE_COLORS.in_ground;
+            const isSelected = unit.id === selectedId;
+            return (
+              <div
+                key={unit.id}
+                className={`absolute flex items-center justify-center cursor-grab active:cursor-grabbing ${isSelected ? 'z-10' : ''}`}
+                style={{ left: p.x, top: p.y, width: bw, height: bh }}
+                onPointerDown={e => onPointerDown(e, unit.id)}
               >
-                {unit.label}
-              </span>
-            </div>
-          );
-        })}
+                <div
+                  className={`rounded-lg border-2 flex items-center justify-center w-full h-full ${isSelected ? 'ring-2 ring-offset-1 ring-blue-400' : ''}`}
+                  style={{
+                    width: w, height: h,
+                    backgroundColor: c.bg, borderColor: c.border,
+                    transform: `rotate(${rot}deg)`,
+                    position: 'absolute',
+                    top: '50%', left: '50%',
+                    marginTop: -h / 2, marginLeft: -w / 2,
+                  }}
+                >
+                  <span
+                    className="text-xs font-semibold text-center px-1 leading-tight pointer-events-none"
+                    style={{ color: c.text }}
+                  >
+                    {unit.label}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Right toolbar */}
+        <div className="flex flex-col gap-2 pt-1 flex-shrink-0">
+          <button
+            title="Rotate selected unit 45°"
+            disabled={!selectedId}
+            onClick={() => selectedId && handleRotate(selectedId)}
+            className={`w-9 h-9 rounded-lg border flex items-center justify-center text-base transition-all ${
+              selectedId
+                ? 'border-garden-400 bg-white text-garden-700 hover:bg-garden-50 shadow-sm'
+                : 'border-gray-200 bg-gray-50 text-gray-300 cursor-not-allowed'
+            }`}
+          >
+            ↻
+          </button>
+          {selectedId && (
+            <p className="text-xs text-gray-400 text-center w-9 leading-tight">
+              {rotations[selectedId] ?? 0}°
+            </p>
+          )}
+        </div>
       </div>
       <p className="text-xs text-gray-400 mt-2 text-center">
-        Drag to arrange · shapes are proportional to the dimensions you entered
+        Tap to select · drag to arrange · ↻ to rotate
       </p>
     </div>
   );
@@ -200,7 +268,6 @@ export default function GardenWizard() {
   const navigate = useNavigate();
   const [saving, setSaving]   = useState(false);
   const [error,  setError]    = useState('');
-  const [syncDims, setSyncDims] = useState(false);
   const photoRef = useRef();
 
   // Main steps: 0=Location, 1=Area count, 2=Area config loop, 3=Preferences, 4=Photo
@@ -239,7 +306,7 @@ export default function GardenWizard() {
 
   // When syncDims is on, propagate changes to all units in the area
   const updateUnitMaybeSynced = (areaIdx, unitId, changes) => {
-    if (syncDims) {
+    if (form.areas[areaIdx]?.syncDims) {
       setForm(f => {
         const areas = [...f.areas];
         areas[areaIdx] = {
@@ -412,7 +479,7 @@ export default function GardenWizard() {
       if (areaSubStep === 0) return currentArea.type_selections.length > 0;
       if (areaSubStep === 1) {
         // When syncing, only unit 1 needs to be filled — others mirror it
-        const unitsToCheck = syncDims ? [currentArea.units[0]] : currentArea.units;
+        const unitsToCheck = currentArea.syncDims ? [currentArea.units[0]] : currentArea.units;
         return unitsToCheck.every(u => u && Number(u.width_ft) > 0 && Number(u.length_ft) > 0);
       }
       return true; // builder is optional
@@ -714,30 +781,23 @@ export default function GardenWizard() {
                   <button
                     type="button"
                     onClick={() => {
-                      const turningOn = !syncDims;
-                      setSyncDims(turningOn);
+                      const turningOn = !currentArea.syncDims;
                       // When turning sync on, immediately copy unit 1's current values to all units
-                      if (turningOn && currentArea.units.length > 1) {
-                        const first = currentArea.units[0];
-                        updateArea(areaIndex, {
-                          units: currentArea.units.map(u => ({
-                            ...u,
-                            width_ft:  first.width_ft,
-                            length_ft: first.length_ft,
-                          })),
-                        });
-                      }
+                      const unitUpdates = turningOn && currentArea.units.length > 1
+                        ? { units: currentArea.units.map(u => ({ ...u, width_ft: currentArea.units[0].width_ft, length_ft: currentArea.units[0].length_ft })) }
+                        : {};
+                      updateArea(areaIndex, { syncDims: turningOn, ...unitUpdates });
                     }}
                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-sm font-medium transition-all ${
-                      syncDims
+                      currentArea.syncDims
                         ? 'border-garden-500 bg-garden-50 text-garden-700'
                         : 'border-gray-200 text-gray-600 hover:border-garden-300'
                     }`}
                   >
                     <span className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all ${
-                      syncDims ? 'bg-garden-500 border-garden-500' : 'border-gray-300'
+                      currentArea.syncDims ? 'bg-garden-500 border-garden-500' : 'border-gray-300'
                     }`}>
-                      {syncDims && <span className="text-white text-xs leading-none">✓</span>}
+                      {currentArea.syncDims && <span className="text-white text-xs leading-none">✓</span>}
                     </span>
                     Use the same dimensions for all {currentArea.units.length} units
                   </button>
@@ -751,7 +811,7 @@ export default function GardenWizard() {
                       ? (parseFloat(unit.width_ft) * parseFloat(unit.length_ft)).toFixed(1)
                       : null;
                     // When synced, only the first card is editable; others show a mirror note
-                    const isReadonly = syncDims && unitIdx > 0;
+                    const isReadonly = currentArea.syncDims && unitIdx > 0;
                     return (
                       <div
                         key={unit.id}
@@ -828,15 +888,6 @@ export default function GardenWizard() {
                   </div>
                 </div>
 
-                <div>
-                  <label className="label">Dimension notes (optional)</label>
-                  <textarea
-                    className="input resize-none" rows={2}
-                    value={currentArea.dimensions_notes}
-                    onChange={e => updateArea(areaIndex, { dimensions_notes: e.target.value })}
-                    placeholder="e.g. East side gets an extra hour of morning sun..."
-                  />
-                </div>
               </div>
             )}
 
@@ -855,7 +906,7 @@ export default function GardenWizard() {
 
                 <GardenBuilder
                   units={currentArea.units}
-                  onLayoutChange={positions => {
+                  onLayoutChange={(positions, rots) => {
                     setForm(f => {
                       const areas = [...f.areas];
                       areas[areaIndex] = {
@@ -864,6 +915,7 @@ export default function GardenWizard() {
                           ...u,
                           x: positions[u.id]?.x ?? u.x,
                           y: positions[u.id]?.y ?? u.y,
+                          rotation: rots?.[u.id] ?? u.rotation ?? 0,
                         })),
                       };
                       return { ...f, areas };
