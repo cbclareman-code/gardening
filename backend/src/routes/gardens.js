@@ -101,7 +101,7 @@ router.post('/', upload.single('photo'), (req, res) => {
     res.status(201).json({ garden });
   } catch (err) {
     console.error('Create garden error:', err);
-    res.status(500).json({ error: 'Failed to create garden' });
+    res.status(500).json({ error: `Failed to create garden: ${err.message}` });
   }
 });
 
