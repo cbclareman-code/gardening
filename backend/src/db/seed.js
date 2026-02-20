@@ -252,13 +252,341 @@ const plants = [
     description: 'Heat-loving nightshade. Needs warmth to produce well.',
     planting_tips: 'Start indoors 8 weeks before last frost. Stake when fruiting.',
     height_inches: 36, color: '#7e22ce'
-  }
+  },
+  // ── More vegetables ───────────────────────────────────────────────────────
+  {
+    id: uuidv4(), name: 'Arugula', scientific_name: 'Eruca vesicaria',
+    category: 'vegetable', emoji: '🥗', min_zone: 3, max_zone: 11,
+    spacing_inches: 6, days_to_maturity: 30, sun_requirement: 'part_shade',
+    water_needs: 'moderate', garden_types: 'in_ground,raised_bed,container',
+    companions: 'Lettuce,Spinach,Radish,Carrot', antagonists: null,
+    description: 'Peppery salad green. Bolts quickly in summer heat.',
+    planting_tips: 'Sow every 2–3 weeks for continuous harvest. Shade extends season.',
+    height_inches: 8, color: '#4d7c0f'
+  },
+  {
+    id: uuidv4(), name: 'Bok Choy', scientific_name: 'Brassica rapa var. chinensis',
+    category: 'vegetable', emoji: '🥬', min_zone: 3, max_zone: 10,
+    spacing_inches: 9, days_to_maturity: 45, sun_requirement: 'part_shade',
+    water_needs: 'moderate', garden_types: 'in_ground,raised_bed,container',
+    companions: 'Celery,Beet,Onion,Dill', antagonists: 'Strawberry,Tomato',
+    description: 'Fast-growing Asian green. Great for spring and fall.',
+    planting_tips: 'Direct sow or transplant. Harvest outer leaves or cut whole head.',
+    height_inches: 14, color: '#65a30d'
+  },
+  {
+    id: uuidv4(), name: 'Swiss Chard', scientific_name: 'Beta vulgaris var. cicla',
+    category: 'vegetable', emoji: '🌈', min_zone: 3, max_zone: 10,
+    spacing_inches: 12, days_to_maturity: 55, sun_requirement: 'part_shade',
+    water_needs: 'moderate', garden_types: 'in_ground,raised_bed,container',
+    companions: 'Beans,Cabbage,Onion,Tomato', antagonists: null,
+    description: 'Colorful stems, nutritious leaves. Tolerates heat better than spinach.',
+    planting_tips: 'Harvest outer leaves regularly. Very ornamental — great for containers.',
+    height_inches: 18, color: '#dc2626'
+  },
+  {
+    id: uuidv4(), name: 'Beet', scientific_name: 'Beta vulgaris',
+    category: 'vegetable', emoji: '🟣', min_zone: 2, max_zone: 10,
+    spacing_inches: 4, days_to_maturity: 60, sun_requirement: 'full_sun',
+    water_needs: 'moderate', garden_types: 'in_ground,raised_bed',
+    companions: 'Kohlrabi,Lettuce,Onion,Brassicas', antagonists: 'Pole Beans,Mustard',
+    description: 'Dual harvest: roots and nutritious greens. Earthy, sweet flavor.',
+    planting_tips: 'Direct sow. Thin to 4" apart. Edible greens throughout season.',
+    height_inches: 12, color: '#7e22ce'
+  },
+  {
+    id: uuidv4(), name: 'Corn', scientific_name: 'Zea mays',
+    category: 'vegetable', emoji: '🌽', min_zone: 4, max_zone: 10,
+    spacing_inches: 12, days_to_maturity: 80, sun_requirement: 'full_sun',
+    water_needs: 'high', garden_types: 'in_ground,raised_bed',
+    companions: 'Beans,Squash,Pumpkin,Cucumber', antagonists: 'Tomato,Celery',
+    description: 'Tall summer crop. Part of the Three Sisters with beans and squash.',
+    planting_tips: 'Plant in blocks (not rows) for wind pollination. Needs lots of nitrogen.',
+    height_inches: 84, color: '#eab308'
+  },
+  {
+    id: uuidv4(), name: 'Broccoli', scientific_name: 'Brassica oleracea var. italica',
+    category: 'vegetable', emoji: '🥦', min_zone: 3, max_zone: 10,
+    spacing_inches: 18, days_to_maturity: 70, sun_requirement: 'full_sun',
+    water_needs: 'moderate', garden_types: 'in_ground,raised_bed',
+    companions: 'Celery,Onion,Potato,Rosemary', antagonists: 'Tomato,Strawberry,Pepper',
+    description: 'Cool-season brassica. Harvest main head, then side shoots continue.',
+    planting_tips: 'Start indoors 6 weeks before last frost. Mulch to retain moisture.',
+    height_inches: 24, color: '#15803d'
+  },
+  {
+    id: uuidv4(), name: 'Cabbage', scientific_name: 'Brassica oleracea var. capitata',
+    category: 'vegetable', emoji: '🥬', min_zone: 1, max_zone: 9,
+    spacing_inches: 18, days_to_maturity: 70, sun_requirement: 'full_sun',
+    water_needs: 'moderate', garden_types: 'in_ground,raised_bed',
+    companions: 'Dill,Celery,Onion,Potato', antagonists: 'Tomato,Strawberry,Grape',
+    description: 'Dense heads in green, red, or savoy. Great for cool seasons.',
+    planting_tips: 'Consistent watering prevents splitting. Use row cover against cabbage worms.',
+    height_inches: 14, color: '#16a34a'
+  },
+  {
+    id: uuidv4(), name: 'Cauliflower', scientific_name: 'Brassica oleracea var. botrytis',
+    category: 'vegetable', emoji: '🤍', min_zone: 3, max_zone: 10,
+    spacing_inches: 18, days_to_maturity: 75, sun_requirement: 'full_sun',
+    water_needs: 'moderate', garden_types: 'in_ground,raised_bed',
+    companions: 'Celery,Beans,Dill,Sage', antagonists: 'Tomato,Strawberry,Pepper',
+    description: 'White, purple, or orange heads. Needs consistent temps to form tight curds.',
+    planting_tips: 'Blanch by folding leaves over head when it\'s golf-ball size.',
+    height_inches: 20, color: '#f5f5f4'
+  },
+  {
+    id: uuidv4(), name: 'Leek', scientific_name: 'Allium ampeloprasum',
+    category: 'vegetable', emoji: '🧅', min_zone: 3, max_zone: 9,
+    spacing_inches: 6, days_to_maturity: 120, sun_requirement: 'full_sun',
+    water_needs: 'moderate', garden_types: 'in_ground,raised_bed',
+    companions: 'Carrot,Celery,Onion,Parsnip', antagonists: 'Beans,Peas',
+    description: 'Mild onion-family member. Harvest in fall through winter.',
+    planting_tips: 'Start indoors early. Hill soil around stems to blanch and extend edible length.',
+    height_inches: 30, color: '#86efac'
+  },
+  {
+    id: uuidv4(), name: 'Parsnip', scientific_name: 'Pastinaca sativa',
+    category: 'vegetable', emoji: '⬜', min_zone: 3, max_zone: 9,
+    spacing_inches: 4, days_to_maturity: 120, sun_requirement: 'full_sun',
+    water_needs: 'moderate', garden_types: 'in_ground,raised_bed',
+    companions: 'Peas,Lettuce,Radish,Rosemary', antagonists: 'Carrot,Celery',
+    description: 'Sweet root that improves after frost. Excellent winter keeper.',
+    planting_tips: 'Direct sow early — slow to germinate. Deep loose soil for long roots.',
+    height_inches: 20, color: '#fef9c3'
+  },
+  {
+    id: uuidv4(), name: 'Green Onion', scientific_name: 'Allium cepa',
+    category: 'vegetable', emoji: '🌿', min_zone: 3, max_zone: 10,
+    spacing_inches: 3, days_to_maturity: 60, sun_requirement: 'full_sun',
+    water_needs: 'moderate', garden_types: 'in_ground,raised_bed,container',
+    companions: 'Carrot,Tomato,Lettuce,Strawberry', antagonists: 'Beans,Peas',
+    description: 'Mild scallions harvested young. Quick-growing and compact.',
+    planting_tips: 'Sow densely and harvest thinnings. Regrows from roots if cut above bulb.',
+    height_inches: 12, color: '#84cc16'
+  },
+  {
+    id: uuidv4(), name: 'Turnip', scientific_name: 'Brassica rapa var. rapa',
+    category: 'vegetable', emoji: '🟤', min_zone: 2, max_zone: 9,
+    spacing_inches: 6, days_to_maturity: 45, sun_requirement: 'full_sun',
+    water_needs: 'moderate', garden_types: 'in_ground,raised_bed',
+    companions: 'Peas,Beans,Lettuce', antagonists: 'Potato,Hedge Mustard',
+    description: 'Fast root crop with edible greens. Sweetens after light frost.',
+    planting_tips: 'Direct sow in spring or fall. Harvest at tennis-ball size for best flavor.',
+    height_inches: 12, color: '#d4d4aa'
+  },
+  {
+    id: uuidv4(), name: 'Pumpkin', scientific_name: 'Cucurbita pepo',
+    category: 'vegetable', emoji: '🎃', min_zone: 3, max_zone: 9,
+    spacing_inches: 60, days_to_maturity: 100, sun_requirement: 'full_sun',
+    water_needs: 'high', garden_types: 'in_ground,raised_bed',
+    companions: 'Corn,Beans,Nasturtium,Marigold', antagonists: 'Potato,Fennel',
+    description: 'Space-hungry vining squash. Cures well for long storage.',
+    planting_tips: 'Give 5×5 ft minimum. Direct sow after last frost. Mulch heavily.',
+    height_inches: 18, color: '#ea580c'
+  },
+  {
+    id: uuidv4(), name: 'Butternut Squash', scientific_name: 'Cucurbita moschata',
+    category: 'vegetable', emoji: '🟧', min_zone: 3, max_zone: 11,
+    spacing_inches: 48, days_to_maturity: 110, sun_requirement: 'full_sun',
+    water_needs: 'moderate', garden_types: 'in_ground,raised_bed',
+    companions: 'Corn,Beans,Nasturtium,Borage', antagonists: 'Potato,Fennel',
+    description: 'Sweet, nutty winter squash that stores for months.',
+    planting_tips: 'Start indoors 3–4 weeks before last frost. Train vines to save space.',
+    height_inches: 16, color: '#d97706'
+  },
+  {
+    id: uuidv4(), name: 'Celery', scientific_name: 'Apium graveolens',
+    category: 'vegetable', emoji: '🟢', min_zone: 5, max_zone: 10,
+    spacing_inches: 12, days_to_maturity: 120, sun_requirement: 'part_shade',
+    water_needs: 'high', garden_types: 'in_ground,raised_bed',
+    companions: 'Tomato,Beans,Leek,Brassicas', antagonists: 'Parsnip,Carrot,Corn',
+    description: 'Requires consistent moisture and cool temps. Very rewarding if patient.',
+    planting_tips: 'Start indoors 10–12 weeks before transplant. Never let soil dry out.',
+    height_inches: 24, color: '#86efac'
+  },
+  {
+    id: uuidv4(), name: 'Hot Pepper', scientific_name: 'Capsicum annuum (hot)',
+    category: 'vegetable', emoji: '🌶️', min_zone: 5, max_zone: 11,
+    spacing_inches: 18, days_to_maturity: 90, sun_requirement: 'full_sun',
+    water_needs: 'moderate', garden_types: 'in_ground,raised_bed,container',
+    companions: 'Basil,Tomato,Carrot,Marigold', antagonists: 'Fennel,Kohlrabi',
+    description: 'Heat-loving nightshade. Hotter in hotter climates and drier conditions.',
+    planting_tips: 'Start 8–10 weeks indoors. Stress slightly (reduce water) to increase heat.',
+    height_inches: 30, color: '#dc2626'
+  },
+  {
+    id: uuidv4(), name: 'Asparagus', scientific_name: 'Asparagus officinalis',
+    category: 'vegetable', emoji: '🌿', min_zone: 3, max_zone: 8,
+    spacing_inches: 18, days_to_maturity: 730, sun_requirement: 'full_sun',
+    water_needs: 'low', garden_types: 'in_ground',
+    companions: 'Tomato,Parsley,Basil,Marigold', antagonists: 'Onion,Garlic,Potato',
+    description: 'Perennial that produces for 20+ years. Plant once, harvest forever.',
+    planting_tips: 'Plant crowns 8" deep. Don\'t harvest first 2 years. Dedicate a permanent bed.',
+    height_inches: 60, color: '#4ade80'
+  },
+  {
+    id: uuidv4(), name: 'Kohlrabi', scientific_name: 'Brassica oleracea var. gongylodes',
+    category: 'vegetable', emoji: '🟢', min_zone: 3, max_zone: 10,
+    spacing_inches: 6, days_to_maturity: 50, sun_requirement: 'full_sun',
+    water_needs: 'moderate', garden_types: 'in_ground,raised_bed,container',
+    companions: 'Beet,Onion,Lettuce,Cucumber', antagonists: 'Tomato,Pepper,Beans',
+    description: 'Crisp, mild, alien-looking brassica. Eaten raw or cooked.',
+    planting_tips: 'Harvest when bulb is 2–3" diameter. Gets woody if too large.',
+    height_inches: 14, color: '#a3e635'
+  },
+  // ── Herbs ────────────────────────────────────────────────────────────────────
+  {
+    id: uuidv4(), name: 'Parsley', scientific_name: 'Petroselinum crispum',
+    category: 'herb', emoji: '🌿', min_zone: 3, max_zone: 9,
+    spacing_inches: 9, days_to_maturity: 70, sun_requirement: 'part_shade',
+    water_needs: 'moderate', garden_types: 'in_ground,raised_bed,container',
+    companions: 'Tomato,Asparagus,Carrot,Rose', antagonists: 'Mint,Alliums',
+    description: 'Biennial herb packed with vitamins. Attracts beneficial insects.',
+    planting_tips: 'Slow to germinate. Soak seeds overnight. Great container herb.',
+    height_inches: 14, color: '#22c55e'
+  },
+  {
+    id: uuidv4(), name: 'Dill', scientific_name: 'Anethum graveolens',
+    category: 'herb', emoji: '🌿', min_zone: 2, max_zone: 11,
+    spacing_inches: 12, days_to_maturity: 45, sun_requirement: 'full_sun',
+    water_needs: 'low', garden_types: 'in_ground,raised_bed',
+    companions: 'Cabbage,Lettuce,Cucumber,Onion', antagonists: 'Carrot,Tomato,Fennel',
+    description: 'Feathery annual. Attracts beneficial wasps and pollinators.',
+    planting_tips: 'Direct sow only — dislikes transplanting. Keep away from fennel (cross-pollinates).',
+    height_inches: 36, color: '#86efac'
+  },
+  {
+    id: uuidv4(), name: 'Sage', scientific_name: 'Salvia officinalis',
+    category: 'herb', emoji: '🌿', min_zone: 4, max_zone: 10,
+    spacing_inches: 24, days_to_maturity: 75, sun_requirement: 'full_sun',
+    water_needs: 'low', garden_types: 'in_ground,raised_bed,container',
+    companions: 'Rosemary,Beans,Brassicas,Carrot', antagonists: 'Basil,Onion,Garlic',
+    description: 'Perennial herb with silvery leaves. Repels cabbage moths and carrot flies.',
+    planting_tips: 'Cut back by 1/3 each spring. Excellent drought tolerance.',
+    height_inches: 20, color: '#9ca3af'
+  },
+  {
+    id: uuidv4(), name: 'Oregano', scientific_name: 'Origanum vulgare',
+    category: 'herb', emoji: '🌿', min_zone: 4, max_zone: 10,
+    spacing_inches: 12, days_to_maturity: 55, sun_requirement: 'full_sun',
+    water_needs: 'low', garden_types: 'in_ground,raised_bed,container',
+    companions: 'Tomato,Pepper,Basil,Squash', antagonists: null,
+    description: 'Perennial Mediterranean herb. Gets stronger after cutting.',
+    planting_tips: 'Cut back before flowering for best flavor. Spreads — divide every 3 years.',
+    height_inches: 12, color: '#4d7c0f'
+  },
+  {
+    id: uuidv4(), name: 'Cilantro', scientific_name: 'Coriandrum sativum',
+    category: 'herb', emoji: '🌿', min_zone: 3, max_zone: 11,
+    spacing_inches: 6, days_to_maturity: 45, sun_requirement: 'part_shade',
+    water_needs: 'moderate', garden_types: 'in_ground,raised_bed,container',
+    companions: 'Spinach,Peas,Tomato,Beans', antagonists: 'Fennel',
+    description: 'Love it or hate it herb. Both leaves and seeds (coriander) are useful.',
+    planting_tips: 'Sow every 3 weeks for continuous supply. Bolt-resistant varieties recommended.',
+    height_inches: 18, color: '#4ade80'
+  },
+  {
+    id: uuidv4(), name: 'Lavender', scientific_name: 'Lavandula angustifolia',
+    category: 'herb', emoji: '💜', min_zone: 5, max_zone: 10,
+    spacing_inches: 24, days_to_maturity: 90, sun_requirement: 'full_sun',
+    water_needs: 'low', garden_types: 'in_ground,raised_bed,container',
+    companions: 'Tomato,Brassicas,Marigold,Rose', antagonists: null,
+    description: 'Drought-tolerant perennial. Repels pests, attracts pollinators.',
+    planting_tips: 'Excellent drainage is essential — will rot in wet soil. Trim after flowering.',
+    height_inches: 24, color: '#a855f7'
+  },
+  {
+    id: uuidv4(), name: 'Chamomile', scientific_name: 'Matricaria chamomilla',
+    category: 'herb', emoji: '🌼', min_zone: 3, max_zone: 9,
+    spacing_inches: 9, days_to_maturity: 60, sun_requirement: 'full_sun',
+    water_needs: 'low', garden_types: 'in_ground,raised_bed,container',
+    companions: 'Cabbage,Onion,Cucumber,Apple', antagonists: null,
+    description: 'Delicate white flowers used for tea. Calming companion plant.',
+    planting_tips: 'Direct sow. Self-seeds freely. Harvest flowers when petals droop back.',
+    height_inches: 18, color: '#fde68a'
+  },
+  {
+    id: uuidv4(), name: 'Lemon Balm', scientific_name: 'Melissa officinalis',
+    category: 'herb', emoji: '🍋', min_zone: 3, max_zone: 9,
+    spacing_inches: 24, days_to_maturity: 60, sun_requirement: 'part_shade',
+    water_needs: 'moderate', garden_types: 'container',
+    companions: 'Tomato,Squash', antagonists: null,
+    description: 'Lemony herb that spreads aggressively. Must be contained. Calms bees.',
+    planting_tips: 'Plant ONLY in containers to prevent invasive spreading across the garden.',
+    height_inches: 24, color: '#fef08a'
+  },
+  {
+    id: uuidv4(), name: 'Fennel', scientific_name: 'Foeniculum vulgare',
+    category: 'herb', emoji: '🌿', min_zone: 5, max_zone: 10,
+    spacing_inches: 18, days_to_maturity: 65, sun_requirement: 'full_sun',
+    water_needs: 'low', garden_types: 'in_ground,raised_bed',
+    companions: 'Dill', antagonists: 'Tomato,Pepper,Beans,Peas,Carrot,Coriander,Kohlrabi',
+    description: 'Anise-flavored herb. ALLELOPATHIC — inhibits most neighboring plants.',
+    planting_tips: 'Plant away from almost everything. Isolate or grow in its own section.',
+    height_inches: 60, color: '#84cc16'
+  },
+  // ── Fruits ───────────────────────────────────────────────────────────────────
+  {
+    id: uuidv4(), name: 'Blueberry', scientific_name: 'Vaccinium corymbosum',
+    category: 'fruit', emoji: '🫐', min_zone: 3, max_zone: 7,
+    spacing_inches: 60, days_to_maturity: 1095, sun_requirement: 'full_sun',
+    water_needs: 'moderate', garden_types: 'in_ground,raised_bed,container',
+    companions: 'Strawberry,Thyme,Basil', antagonists: 'Tomato,Pepper',
+    description: 'Perennial shrub. Needs acidic soil (pH 4.5–5.5). Plant 2+ varieties for best yield.',
+    planting_tips: 'Acidify soil with sulfur. Mulch with pine needles. Takes 3 years to full production.',
+    height_inches: 60, color: '#6d28d9'
+  },
+  {
+    id: uuidv4(), name: 'Raspberry', scientific_name: 'Rubus idaeus',
+    category: 'fruit', emoji: '🫐', min_zone: 3, max_zone: 9,
+    spacing_inches: 24, days_to_maturity: 365, sun_requirement: 'full_sun',
+    water_needs: 'moderate', garden_types: 'in_ground',
+    companions: 'Garlic,Marigold,Lavender', antagonists: 'Blackberry,Tomato,Potato',
+    description: 'Perennial canes with summer and fall varieties. Spreads via suckers.',
+    planting_tips: 'Trellis required. Prune old canes after fruiting. Remove suckers to control spread.',
+    height_inches: 60, color: '#e11d48'
+  },
+  {
+    id: uuidv4(), name: 'Watermelon', scientific_name: 'Citrullus lanatus',
+    category: 'fruit', emoji: '🍉', min_zone: 5, max_zone: 10,
+    spacing_inches: 72, days_to_maturity: 90, sun_requirement: 'full_sun',
+    water_needs: 'high', garden_types: 'in_ground',
+    companions: 'Nasturtium,Marigold,Radish,Corn', antagonists: null,
+    description: 'Space-hungry summer fruit. Needs heat and a long growing season.',
+    planting_tips: 'Start indoors 3 weeks before last frost. Needs 80+ warm days. Lift fruit on tiles.',
+    height_inches: 18, color: '#16a34a'
+  },
+  {
+    id: uuidv4(), name: 'Cantaloupe', scientific_name: 'Cucumis melo',
+    category: 'fruit', emoji: '🍈', min_zone: 5, max_zone: 10,
+    spacing_inches: 48, days_to_maturity: 80, sun_requirement: 'full_sun',
+    water_needs: 'moderate', garden_types: 'in_ground,raised_bed',
+    companions: 'Nasturtium,Marigold,Corn', antagonists: 'Potato,Cucumber',
+    description: 'Sweet muskmelon that loves heat. Harvest when stem slips easily.',
+    planting_tips: 'Start indoors 3 weeks before last frost. Reduce water as fruit matures.',
+    height_inches: 18, color: '#d97706'
+  },
+  // ── Flowers ──────────────────────────────────────────────────────────────────
+  {
+    id: uuidv4(), name: 'Zinnia', scientific_name: 'Zinnia elegans',
+    category: 'flower', emoji: '🌺', min_zone: 2, max_zone: 11,
+    spacing_inches: 12, days_to_maturity: 60, sun_requirement: 'full_sun',
+    water_needs: 'low', garden_types: 'in_ground,raised_bed,container',
+    companions: 'Tomato,Cucumber,Pepper,Squash', antagonists: null,
+    description: 'Vibrant annual. Attracts butterflies and pollinators all summer.',
+    planting_tips: 'Direct sow after last frost. Deadhead to extend bloom. Plant in clusters.',
+    height_inches: 24, color: '#f43f5e'
+  },
 ];
 
-// Only seed if plants table is empty
-const existing = db.prepare('SELECT COUNT(*) as count FROM plants').get();
-if (existing.count > 0) {
-  console.log(`✅ Plants already seeded (${existing.count} plants in database)`);
+// Additive seed — insert only plants not already in DB by name
+const existingNames = new Set(
+  db.prepare('SELECT name FROM plants').all().map(p => p.name)
+);
+const toInsert = plants.filter(p => !existingNames.has(p.name));
+
+if (toInsert.length === 0) {
+  console.log(`✅ Plants already seeded (${existingNames.size} plants in database)`);
   process.exit(0);
 }
 
@@ -274,9 +602,9 @@ const insertPlant = db.prepare(`
 `);
 
 db.exec('BEGIN');
-for (const plant of plants) {
+for (const plant of toInsert) {
   insertPlant.run(plant);
 }
 db.exec('COMMIT');
-console.log(`✅ Seeded ${plants.length} plants into database`);
+console.log(`✅ Seeded ${toInsert.length} new plants (total: ${existingNames.size + toInsert.length})`);
 process.exit(0);

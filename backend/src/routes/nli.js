@@ -254,48 +254,64 @@ router.post('/recommend/:gardenId', async (req, res) => {
     const zone = String(garden.hardiness_zone || '6');
     const frost = FROST_DATES[zone] || FROST_DATES['6'];
 
+    // Build detailed per-unit summary including capacity, sun, and history
     const unitSummary = units.map(u => {
-      const sqft = ((parseFloat(u.width_ft) || 0) * (parseFloat(u.length_ft) || 0)).toFixed(0);
-      return `- Unit ${u.id} "${u.label}" [${u.type_id}] ${u.width_ft || '?'}ft × ${u.length_ft || '?'}ft (${sqft} sq ft), area: "${u.area_name || 'Main'}"`;
+      const wft = parseFloat(u.width_ft) || 0;
+      const lft = parseFloat(u.length_ft) || 0;
+      const sqft = (wft * lft).toFixed(1);
+      const sun = u.sun_exposure || garden.sun_exposure || 'full_sun';
+      const prev = u.previous_plants ? `previously grew: ${u.previous_plants}` : 'no prior planting history';
+      const fenced = u.has_fencing ? ', fenced' : '';
+      return `Unit ${u.id} "${u.label}" [${u.type_id}] ${wft}ft × ${lft}ft = ${sqft} sqft | sun: ${sun}${fenced} | ${prev}`;
     }).join('\n');
 
-    const plantCatalog = allPlants.map(p =>
-      `${p.name} (${p.category}, ${p.spacing_inches}" apart, ${p.days_to_maturity}d to maturity, sun: ${p.sun_requirement}, companions: ${p.companions || 'none'})`
-    ).join('\n');
+    // Plant catalog with capacity hints per spacing
+    const plantCatalog = allPlants.map(p => {
+      const sp = p.spacing_inches || 12;
+      const spFt = sp / 12;
+      const invasive = (p.name === 'Mint' || (p.antagonists || '').includes('spreads')) ? ' ⚠️INVASIVE' : '';
+      return `${p.name}${invasive} | ${p.category} | spacing: ${sp}" (needs ${(spFt * spFt).toFixed(2)} sqft each) | ${p.days_to_maturity}d | sun: ${p.sun_requirement} | companions: ${p.companions || 'none'} | antagonists: ${p.antagonists || 'none'} | types: ${p.garden_types}`;
+    }).join('\n');
 
-    const prompt = `You are an expert garden planner creating a personalized planting plan.
+    const prompt = `You are an expert organic garden planner. Create a precise, space-aware planting plan.
 
-GARDEN:
-- Name: ${garden.name}
-- Hardiness Zone: ${zone}
-- Last spring frost: ${frost.last} | First fall frost: ${frost.first}
-- Sun exposure: ${garden.sun_exposure}
-- Irrigation: ${garden.irrigation_type}
-- Fencing: ${garden.has_fencing ? 'Yes' : 'No'}
-- Notes: ${garden.notes || 'none'}
+GARDEN: ${garden.name}
+Zone: ${zone} | Last spring frost: ${frost.last} | First fall frost: ${frost.first}
+Irrigation: ${garden.irrigation_type} | Notes: ${garden.notes || 'none'}
 
-GARDEN UNITS (assign plants to these):
+GARDEN UNITS:
 ${unitSummary}
 
-PLANT CATALOG (choose from these only):
+PLANT CATALOG (use exact names from this list only):
 ${plantCatalog}
 
 TODAY: February 20, 2026
 
-TASK: Create an optimized planting plan. For each unit:
-1. Choose plants that fit the space (use spacing_inches to estimate count — 1 sq ft per spacing_inches/12 squared)
-2. Prioritize companion planting pairs within the same unit
-3. Match sun requirements to the garden's sun exposure
-4. Vary crop types across units for rotation
-5. For areas with multiple units of the same type, consider succession planting (same crop planted 2-3 weeks apart)
+STRICT RULES — violations will produce a bad plan:
 
-Return ONLY valid JSON — no markdown, no preamble:
+1. CAPACITY: Each unit can hold at most floor(sqft / (spacing_inches/12)²) plants of a single variety. Never exceed this. A 2 sqft container with Strawberry (18" spacing = 1.5ft → 2.25 sqft each) fits 0 Strawberry plants — do NOT assign Strawberry to a 2 sqft container. A 12 sqft raised bed fits floor(12/2.25)=5 Strawberries.
+
+2. INVASIVE PLANTS: Mint MUST go in a container alone — never in raised beds or in-ground beds, and never mixed with other plants. Lemon Balm same rule.
+
+3. SUN MATCHING: Only assign full_sun plants to full_sun units. Part_shade plants tolerate both full_sun and part_shade. Never assign full_sun plants to shade units.
+
+4. COMPANION GROUPS: Place known companion pairs in the same unit (e.g., Tomato + Basil + Marigold, Three Sisters: Corn + Beans + Squash). This is the primary optimization goal.
+
+5. ANTAGONIST AVOIDANCE: Never place antagonists together in the same unit (e.g., Tomato + Fennel, Onion + Beans).
+
+6. CROP ROTATION: If a unit has previous plants listed, do NOT assign the same plant family. Tomato/Pepper/Eggplant = nightshades. Carrot/Parsley/Dill = umbellifers. Cabbage/Kale/Broccoli = brassicas. Onion/Garlic/Leek = alliums. Beans/Peas = legumes.
+
+7. TYPE MATCHING: Container plants must be in container or raised_bed units. Plants with garden_types "in_ground,raised_bed" should NOT go in a 1-2 sqft container.
+
+8. VARIETY: Use multiple different plant families across units for biodiversity. Spread crops by type (leaf/root/fruit/herb) across units.
+
+Return ONLY valid JSON:
 {
   "plant_assignments": {
-    "1": ["Tomato", "Basil"],
+    "1": ["Tomato", "Basil", "Marigold"],
     "2": ["Lettuce", "Carrot", "Radish"]
   },
-  "summary": "3-5 paragraph written explanation covering: what's in each unit, why companion pairs were chosen, sun exposure reasoning, succession planting opportunities, and any cautions (antagonists, spacing)",
+  "summary": "3-5 paragraphs: what's in each unit and why, companion pairs chosen, sun/space reasoning, rotation decisions, and any important cautions",
   "planting_schedule": [
     {
       "plant_name": "Tomato",
@@ -305,15 +321,15 @@ Return ONLY valid JSON — no markdown, no preamble:
       "transplant_outdoors": "2026-05-01",
       "first_harvest": "2026-07-15",
       "last_harvest": "2026-09-30",
-      "notes": "Start indoors 6-8 weeks before last frost"
+      "notes": "Start 6-8 weeks before last frost"
     }
   ]
 }
-Omit "sow_indoors" for direct-sown crops. Use realistic 2026 dates.`;
+Omit sow_indoors for direct-sown crops. Use realistic 2026 dates matching zone ${zone}.`;
 
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 3000,
+      max_tokens: 2000,
       messages: [{ role: 'user', content: prompt }],
     });
 

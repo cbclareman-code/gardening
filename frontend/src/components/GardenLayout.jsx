@@ -10,6 +10,65 @@ const TYPE_COLORS = {
   greenhouse:   { bg: '#f0fdf4', border: '#15803d', text: '#052e16', pill: '#15803d' },
 };
 
+// ── Spatial mini-map of units (reflects builder arrangement) ─────────────────
+const BUILDER_SCALE = 14; // px per foot — same as builder
+function unitBuilderSize(u) {
+  return {
+    w: Math.max((parseFloat(u.width_ft) || 3) * BUILDER_SCALE, 38),
+    h: Math.max((parseFloat(u.length_ft) || 3) * BUILDER_SCALE, 26),
+  };
+}
+
+function AreaMiniMap({ units }) {
+  if (!units.length) return null;
+  const rects = units.map(u => {
+    const { w, h } = unitBuilderSize(u);
+    const rot = u.rotation ?? 0;
+    const rad = (rot * Math.PI) / 180;
+    const cos = Math.abs(Math.cos(rad)), sin = Math.abs(Math.sin(rad));
+    const bw = w * cos + h * sin, bh = w * sin + h * cos;
+    return { ...u, cx: (u.x ?? 12) + bw / 2, cy: (u.y ?? 12) + bh / 2, w, h, rot, c: TYPE_COLORS[u.type_id] || TYPE_COLORS.in_ground };
+  });
+
+  const minX = Math.min(...rects.map(r => r.cx - r.w / 2)) - 4;
+  const minY = Math.min(...rects.map(r => r.cy - r.h / 2)) - 4;
+  const maxX = Math.max(...rects.map(r => r.cx + r.w / 2)) + 4;
+  const maxY = Math.max(...rects.map(r => r.cy + r.h / 2)) + 4;
+  const contentW = maxX - minX;
+  const contentH = maxY - minY;
+  const MAP_W = 232;
+  const scale = Math.min(MAP_W / contentW, 100 / contentH);
+  const mapH = Math.round(contentH * scale) + 1;
+
+  return (
+    <svg
+      width={MAP_W} height={mapH}
+      className="rounded-lg border border-gray-200 bg-gray-50 w-full"
+      style={{ display: 'block' }}
+      viewBox={`0 0 ${MAP_W} ${mapH}`}
+    >
+      {rects.map(r => {
+        const sx = (r.cx - minX) * scale;
+        const sy = (r.cy - minY) * scale;
+        const sw = r.w * scale;
+        const sh = r.h * scale;
+        return (
+          <g key={r.id} transform={`translate(${sx},${sy}) rotate(${r.rot})`}>
+            <rect x={-sw / 2} y={-sh / 2} width={sw} height={sh} rx={2}
+              fill={r.c.bg} stroke={r.c.border} strokeWidth={1.5} />
+            {sw > 24 && (
+              <text textAnchor="middle" dy="0.35em" fontSize={Math.min(7, sw / 5)}
+                fill={r.c.text} fontWeight="bold" style={{ pointerEvents: 'none' }}>
+                {r.label}
+              </text>
+            )}
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
 const TYPE_LABELS = {
   raised_bed: 'Raised Bed', in_ground: 'In-Ground', container: 'Container',
   vertical: 'Vertical', hugelkultur: 'Hugelkultur', straw_bale: 'Straw Bale', greenhouse: 'Greenhouse',
@@ -56,8 +115,8 @@ function AreaCarousel({ units, plants, layoutData, onPlantRemove }) {
     <div className="space-y-5">
       {/* Unassigned notice */}
       {!hasAssignments && plants.length > 0 && (
-        <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-sm text-blue-800">
-          Plants are distributed evenly across units below. Use <strong>Get AI Plant Plan</strong> for an optimized, space-aware assignment.
+        <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-800">
+          Plants shown below are placeholder placings. Use <strong>Get AI Plant Plan</strong> above for an assignment optimized around spacing, companion grouping, sun requirements, and crop rotation.
         </div>
       )}
 
@@ -68,12 +127,14 @@ function AreaCarousel({ units, plants, layoutData, onPlantRemove }) {
             const areaUnits = areaMap[areaName];
             return (
               <div key={areaName} className="flex-shrink-0 w-64 space-y-3">
-                {/* Area header — only show when there are multiple areas */}
+                {/* Area header */}
                 {areaOrder.length > 1 && (
                   <div className="text-xs font-bold text-gray-500 uppercase tracking-wider border-b border-gray-200 pb-1.5">
                     {areaName}
                   </div>
                 )}
+                {/* Spatial mini-map of this area's unit layout */}
+                <AreaMiniMap units={areaUnits} />
 
                 {areaUnits.map(u => {
                   const c = TYPE_COLORS[u.type_id] || TYPE_COLORS.in_ground;

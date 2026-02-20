@@ -80,7 +80,7 @@ export default function PlantCard({ plant, selected, onToggle, compact = false }
       {/* Companions */}
       {plant.companions && (
         <div className="text-xs text-green-700 bg-green-50 rounded-lg px-2 py-1 truncate">
-          🤝 Likes: {plant.companions}
+          🤝 Likes: {plant.companions.split(',').map(s => s.trim()).join(', ')}
         </div>
       )}
 

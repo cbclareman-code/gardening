@@ -84,15 +84,8 @@ export default function GardenView() {
   const handleRecommend = async () => {
     setRecommending(true);
     try {
-      const { data } = await api.post(`/nli/recommend/${id}`);
-      setGarden(data.garden);
-      if (data.plants) {
-        const enriched = data.plants.map(gp => {
-          const full = allPlants.find(p => p.id === gp.plant_id);
-          return { ...gp, ...(full || {}) };
-        });
-        setGardenPlants(enriched);
-      }
+      await api.post(`/nli/recommend/${id}`);
+      await loadGarden();
       toast('AI plan ready!');
     } catch (err) {
       toast(err.response?.data?.error || 'Recommendation failed — try again');

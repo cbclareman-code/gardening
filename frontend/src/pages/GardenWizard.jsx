@@ -71,6 +71,7 @@ function syncUnits(area) {
         label: sel.quantity > 1 ? `${typeInfo.label} ${i + 1}` : typeInfo.label,
         width_ft:  prev?.width_ft  ?? '',
         length_ft: prev?.length_ft ?? '',
+        previous_plants: prev?.previous_plants ?? '',
         x: prev?.x ?? 12 + (id - 1) * 22,
         y: prev?.y ?? 12,
       });
@@ -176,82 +177,81 @@ function GardenBuilder({ units, onLayoutChange }) {
 
   return (
     <div className="overflow-x-auto -mx-1">
-      <div className="flex gap-3 items-start">
-        {/* Canvas */}
-        <div
-          ref={canvasRef}
-          className="relative rounded-xl border-2 border-gray-200 bg-gray-50 overflow-hidden select-none touch-none flex-shrink-0"
-          style={{ width: CVS_W, height: CVS_H }}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          onPointerLeave={onPointerUp}
-        >
-          {/* Grid lines */}
-          <svg className="absolute inset-0 pointer-events-none" width={CVS_W} height={CVS_H}>
-            <defs>
-              <pattern id="builder-grid" width={SNAP * 2} height={SNAP * 2} patternUnits="userSpaceOnUse">
-                <path d={`M ${SNAP * 2} 0 L 0 0 0 ${SNAP * 2}`} fill="none" stroke="#e5e7eb" strokeWidth="0.5" />
-              </pattern>
-            </defs>
-            <rect width={CVS_W} height={CVS_H} fill="url(#builder-grid)" />
-          </svg>
+      <div
+        ref={canvasRef}
+        className="relative rounded-xl border-2 border-gray-200 bg-gray-50 select-none touch-none"
+        style={{ width: CVS_W, height: CVS_H }}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerLeave={onPointerUp}
+      >
+        {/* Grid lines */}
+        <svg className="absolute inset-0 pointer-events-none" width={CVS_W} height={CVS_H}>
+          <defs>
+            <pattern id="builder-grid" width={SNAP * 2} height={SNAP * 2} patternUnits="userSpaceOnUse">
+              <path d={`M ${SNAP * 2} 0 L 0 0 0 ${SNAP * 2}`} fill="none" stroke="#e5e7eb" strokeWidth="0.5" />
+            </pattern>
+          </defs>
+          <rect width={CVS_W} height={CVS_H} fill="url(#builder-grid)" />
+        </svg>
 
-          {/* Units */}
-          {units.map(unit => {
-            const p   = pos[unit.id] || { x: 12, y: 12 };
-            const rot = rotations[unit.id] ?? 0;
-            const { w, h } = unitPx(unit);
-            const { bw, bh } = rotatedBounds(w, h, rot);
-            const c   = TYPE_COLORS[unit.type_id] || TYPE_COLORS.in_ground;
-            const isSelected = unit.id === selectedId;
-            return (
+        {/* Units */}
+        {units.map(unit => {
+          const p   = pos[unit.id] || { x: 12, y: 12 };
+          const rot = rotations[unit.id] ?? 0;
+          const { w, h } = unitPx(unit);
+          const { bw, bh } = rotatedBounds(w, h, rot);
+          const c   = TYPE_COLORS[unit.type_id] || TYPE_COLORS.in_ground;
+          const isSelected = unit.id === selectedId;
+          return (
+            <div
+              key={unit.id}
+              className={`absolute flex items-center justify-center cursor-grab active:cursor-grabbing ${isSelected ? 'z-10' : ''}`}
+              style={{ left: p.x, top: p.y, width: bw, height: bh }}
+              onPointerDown={e => onPointerDown(e, unit.id)}
+            >
               <div
-                key={unit.id}
-                className={`absolute flex items-center justify-center cursor-grab active:cursor-grabbing ${isSelected ? 'z-10' : ''}`}
-                style={{ left: p.x, top: p.y, width: bw, height: bh }}
-                onPointerDown={e => onPointerDown(e, unit.id)}
+                className={`rounded-lg border-2 flex items-center justify-center ${isSelected ? 'ring-2 ring-offset-1 ring-blue-400' : ''}`}
+                style={{
+                  width: w, height: h,
+                  backgroundColor: c.bg, borderColor: c.border,
+                  transform: `rotate(${rot}deg)`,
+                  position: 'absolute',
+                  top: '50%', left: '50%',
+                  marginTop: -h / 2, marginLeft: -w / 2,
+                }}
               >
-                <div
-                  className={`rounded-lg border-2 flex items-center justify-center w-full h-full ${isSelected ? 'ring-2 ring-offset-1 ring-blue-400' : ''}`}
-                  style={{
-                    width: w, height: h,
-                    backgroundColor: c.bg, borderColor: c.border,
-                    transform: `rotate(${rot}deg)`,
-                    position: 'absolute',
-                    top: '50%', left: '50%',
-                    marginTop: -h / 2, marginLeft: -w / 2,
-                  }}
+                <span
+                  className="text-xs font-semibold text-center px-1 leading-tight pointer-events-none"
+                  style={{ color: c.text }}
                 >
-                  <span
-                    className="text-xs font-semibold text-center px-1 leading-tight pointer-events-none"
-                    style={{ color: c.text }}
-                  >
-                    {unit.label}
-                  </span>
-                </div>
+                  {unit.label}
+                </span>
               </div>
-            );
-          })}
-        </div>
+            </div>
+          );
+        })}
 
-        {/* Right toolbar */}
-        <div className="flex flex-col gap-2 pt-1 flex-shrink-0">
+        {/* Rotate toolbar — absolute top-right inside canvas, always visible */}
+        <div
+          className="absolute top-2 right-2 z-20 flex flex-col items-center gap-1"
+          onPointerDown={e => e.stopPropagation()}
+        >
           <button
-            title="Rotate selected unit 45°"
-            disabled={!selectedId}
+            title={selectedId ? 'Rotate 45°' : 'Tap a unit to select it, then rotate'}
             onClick={() => selectedId && handleRotate(selectedId)}
-            className={`w-9 h-9 rounded-lg border flex items-center justify-center text-base transition-all ${
+            className={`w-9 h-9 rounded-lg border-2 flex items-center justify-center text-lg shadow-sm transition-all ${
               selectedId
-                ? 'border-garden-400 bg-white text-garden-700 hover:bg-garden-50 shadow-sm'
-                : 'border-gray-200 bg-gray-50 text-gray-300 cursor-not-allowed'
+                ? 'border-garden-400 bg-white text-garden-700 hover:bg-garden-50 cursor-pointer'
+                : 'border-gray-200 bg-white/70 text-gray-300 cursor-not-allowed'
             }`}
           >
             ↻
           </button>
           {selectedId && (
-            <p className="text-xs text-gray-400 text-center w-9 leading-tight">
+            <span className="text-xs text-gray-500 bg-white/80 rounded px-1 leading-tight">
               {rotations[selectedId] ?? 0}°
-            </p>
+            </span>
           )}
         </div>
       </div>
@@ -453,8 +453,14 @@ export default function GardenWizard() {
         }
       }
 
-      // Save unit positions as layout_data so the garden view can show familiar unit layout
-      const allUnits = form.areas.flatMap(a => a.units.map(u => ({ ...u, area_name: a.name })));
+      // Save unit positions + per-area metadata so AI planner has full context
+      const allUnits = form.areas.flatMap(a => a.units.map(u => ({
+        ...u,
+        area_name: a.name,
+        sun_exposure: a.sun_exposure,
+        has_fencing: a.has_fencing,
+        irrigation_type: a.irrigation_type,
+      })));
       if (allUnits.length > 0) {
         fd.append('layout_data', JSON.stringify({ version: 2, units: allUnits }));
       }
@@ -638,8 +644,7 @@ export default function GardenWizard() {
             <div>
               <h2 className="font-semibold text-gray-800 mb-1">How many garden areas do you have?</h2>
               <p className="text-sm text-gray-500 mb-5">
-                A garden area is a distinct section of your property with its own boundaries — like a backyard
-                raised-bed setup, a front-porch container garden, or a side-yard in-ground plot.
+                A garden area is a distinct section of your property with its own boundaries — like a backyard raised-bed setup, a front-porch container garden, a side-yard in-ground plot, or good old fashioned pots on separate window sills.
               </p>
               <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
                 {[1, 2, 3, 4, 5, 6].map(n => (
@@ -740,7 +745,18 @@ export default function GardenWizard() {
                                 disabled={sel.quantity <= 1}
                                 className="w-7 h-7 rounded-full border border-gray-300 flex items-center justify-center text-gray-700 hover:bg-gray-100 disabled:opacity-30 text-sm font-bold"
                               >−</button>
-                              <span className="w-6 text-center font-bold text-gray-800 text-sm">{sel.quantity}</span>
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                value={sel.quantity}
+                                onChange={e => {
+                                  const v = e.target.value.replace(/\D/g, '');
+                                  if (v === '') return;
+                                  const n = parseInt(v, 10);
+                                  if (n >= 1) setQty(areaIndex, type.id, n);
+                                }}
+                                className="w-10 text-center font-bold text-gray-800 text-sm border border-gray-300 rounded-lg py-0.5 focus:outline-none focus:ring-1 focus:ring-garden-400"
+                              />
                               <button
                                 onClick={() => setQty(areaIndex, type.id, sel.quantity + 1)}
                                 className="w-7 h-7 rounded-full border border-gray-300 flex items-center justify-center text-gray-700 hover:bg-gray-100 text-sm font-bold"
@@ -861,6 +877,20 @@ export default function GardenWizard() {
                               readOnly={isReadonly}
                             />
                           </div>
+                        </div>
+                        <div>
+                          <label className="label text-xs">
+                            What grew here before?{' '}
+                            <span className="text-gray-400 font-normal">(optional — helps with crop rotation)</span>
+                          </label>
+                          <input
+                            type="text"
+                            className="input text-sm"
+                            value={unit.previous_plants ?? ''}
+                            onChange={e => updateUnitMaybeSynced(areaIndex, unit.id, { previous_plants: e.target.value })}
+                            placeholder="e.g. Oregano, Tomato, Basil"
+                            readOnly={isReadonly}
+                          />
                         </div>
                       </div>
                     );
