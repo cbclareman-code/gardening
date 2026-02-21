@@ -211,7 +211,7 @@ function GardenBuilder({ units, onLayoutChange }) {
               onPointerDown={e => onPointerDown(e, unit.id)}
             >
               <div
-                className={`rounded-lg border-2 flex items-center justify-center ${isSelected ? 'ring-2 ring-offset-1 ring-blue-400' : ''}`}
+                className={`rounded-lg border-2 flex flex-col items-center justify-center gap-0.5 ${isSelected ? 'ring-2 ring-offset-1 ring-blue-400' : ''}`}
                 style={{
                   width: w, height: h,
                   backgroundColor: c.bg, borderColor: c.border,
@@ -227,6 +227,14 @@ function GardenBuilder({ units, onLayoutChange }) {
                 >
                   {unit.label}
                 </span>
+                {unit.previous_plants && (
+                  <span
+                    className="text-center px-1 leading-none pointer-events-none italic opacity-70 truncate max-w-full"
+                    style={{ color: c.text, fontSize: '8px' }}
+                  >
+                    ↩ {unit.previous_plants.split(',')[0].trim()}
+                  </span>
+                )}
               </div>
             </div>
           );
@@ -379,7 +387,7 @@ export default function GardenWizard() {
       const areas = [...f.areas];
       const area  = { ...areas[areaIdx] };
       area.type_selections = area.type_selections.map(s =>
-        s.type_id === typeId ? { ...s, quantity: Math.max(1, qty) } : s
+        s.type_id === typeId ? { ...s, quantity: Math.max(0, qty) } : s
       );
       areas[areaIdx] = area;
       return { ...f, areas };
@@ -482,7 +490,7 @@ export default function GardenWizard() {
     if (step === 0) return form.name.trim().length > 0;
     if (step === 1) return form.num_areas >= 1;
     if (step === 2 && currentArea) {
-      if (areaSubStep === 0) return currentArea.type_selections.length > 0;
+      if (areaSubStep === 0) return currentArea.type_selections.length > 0 && currentArea.type_selections.every(s => s.quantity >= 1);
       if (areaSubStep === 1) {
         // When syncing, only unit 1 needs to be filled — others mirror it
         const unitsToCheck = currentArea.syncDims ? [currentArea.units[0]] : currentArea.units;
@@ -508,19 +516,22 @@ export default function GardenWizard() {
     if (step === 1) { setStep(2); setAreaIndex(0); setAreaSubStep(0); return; }
     if (step === 2) {
       if (areaSubStep === 0) {
-        // Sync units from selections, preserving existing dimension data
+        // Sync units from type selections, preserving existing dimension data
         const synced = syncUnits(currentArea);
         updateArea(areaIndex, { units: synced });
         setAreaSubStep(1);
       } else if (areaSubStep === 1) {
-        if (isMultiUnit) setAreaSubStep(2);
-        else goNextArea();
+        setAreaSubStep(2); // → Previous Plants
+      } else if (areaSubStep === 2) {
+        if (isMultiUnit) setAreaSubStep(3); // → Builder
+        else setAreaSubStep(4);             // → Preferences (skip builder for 1 unit)
+      } else if (areaSubStep === 3) {
+        setAreaSubStep(4); // Builder → Preferences
       } else {
-        goNextArea();
+        goNextArea(); // Preferences done → next area or Photo step
       }
       return;
     }
-    if (step === 3) { setStep(4); return; }
   };
 
   const handleBack = () => {
@@ -528,37 +539,38 @@ export default function GardenWizard() {
     if (step <= 0) return;
     if (step === 1) { setStep(0); return; }
     if (step === 2) {
+      if (areaSubStep === 4) { setAreaSubStep(isMultiUnit ? 3 : 2); return; }
+      if (areaSubStep === 3) { setAreaSubStep(2); return; }
       if (areaSubStep === 2) { setAreaSubStep(1); return; }
       if (areaSubStep === 1) { setAreaSubStep(0); return; }
-      // areaSubStep === 0
+      // areaSubStep === 0 — go back to previous area's preferences
       if (areaIndex === 0) { setStep(1); }
       else {
-        const prevArea = form.areas[areaIndex - 1];
         setAreaIndex(i => i - 1);
-        setAreaSubStep(totalUnitsInArea(prevArea) > 1 ? 2 : 1);
+        setAreaSubStep(4); // land on preferences of previous area
       }
       return;
     }
     if (step === 3) {
+      // Photo — go back to last area's preferences (subStep 4)
       setStep(2);
-      const lastIdx  = form.num_areas - 1;
-      const lastArea = form.areas[lastIdx];
+      const lastIdx = form.num_areas - 1;
       setAreaIndex(lastIdx);
-      setAreaSubStep(totalUnitsInArea(lastArea) > 1 ? 2 : 1);
+      setAreaSubStep(4);
       return;
     }
-    if (step === 4) { setStep(3); return; }
   };
 
   // ── progress bar ───────────────────────────────────────────────────────────
-  // Total "slots": location + areas + (each area's sub-steps) + prefs + photo
-  const areaSlots   = form.areas.reduce((s, a) => s + (totalUnitsInArea(a) > 1 ? 3 : 2), 0);
-  const totalSlots  = 2 + areaSlots + 2;
-  const doneSlots   = step === 0 ? 0
+  // Each area has 5 sub-steps (multi-unit) or 4 (single-unit, skips builder)
+  const areaSlots  = form.areas.reduce((s, a) => s + (totalUnitsInArea(a) > 1 ? 5 : 4), 0);
+  const totalSlots = 2 + areaSlots + 1; // location + area-count + area-loop + photo
+  // When on subStep 4 in a single-unit area, count it as slot 3 (builder was skipped)
+  const currentSubSlot = isMultiUnit ? areaSubStep : (areaSubStep >= 4 ? 3 : areaSubStep);
+  const doneSlots  = step === 0 ? 0
     : step === 1 ? 1
-    : step === 2 ? 2 + form.areas.slice(0, areaIndex).reduce((s, a) => s + (totalUnitsInArea(a) > 1 ? 3 : 2), 0) + areaSubStep
-    : step === 3 ? 2 + areaSlots
-    : 2 + areaSlots + 1;
+    : step === 2 ? 2 + form.areas.slice(0, areaIndex).reduce((s, a) => s + (totalUnitsInArea(a) > 1 ? 5 : 4), 0) + currentSubSlot
+    : 2 + areaSlots;
 
   const progress = Math.round((doneSlots / totalSlots) * 100);
 
@@ -566,8 +578,9 @@ export default function GardenWizard() {
     : step === 1 ? 'Garden Areas'
     : step === 2 && areaSubStep === 0 ? `${currentArea?.name}: Types`
     : step === 2 && areaSubStep === 1 ? `${currentArea?.name}: Dimensions`
-    : step === 2 && areaSubStep === 2 ? `${currentArea?.name}: Layout`
-    : step === 3 ? 'Preferences'
+    : step === 2 && areaSubStep === 2 ? `${currentArea?.name}: History`
+    : step === 2 && areaSubStep === 3 ? `${currentArea?.name}: Layout`
+    : step === 2 && areaSubStep === 4 ? `${currentArea?.name}: Preferences`
     : 'Photo';
 
   // ── render ─────────────────────────────────────────────────────────────────
@@ -748,10 +761,10 @@ export default function GardenWizard() {
                               <input
                                 type="text"
                                 inputMode="numeric"
-                                value={sel.quantity}
+                                value={sel.quantity === 0 ? '' : sel.quantity}
                                 onChange={e => {
                                   const v = e.target.value.replace(/\D/g, '');
-                                  if (v === '') return;
+                                  if (v === '') { setQty(areaIndex, type.id, 0); return; }
                                   const n = parseInt(v, 10);
                                   if (n >= 1) setQty(areaIndex, type.id, n);
                                 }}
@@ -878,20 +891,6 @@ export default function GardenWizard() {
                             />
                           </div>
                         </div>
-                        <div>
-                          <label className="label text-xs">
-                            What grew here before?{' '}
-                            <span className="text-gray-400 font-normal">(optional — helps with crop rotation)</span>
-                          </label>
-                          <input
-                            type="text"
-                            className="input text-sm"
-                            value={unit.previous_plants ?? ''}
-                            onChange={e => updateUnitMaybeSynced(areaIndex, unit.id, { previous_plants: e.target.value })}
-                            placeholder="e.g. Oregano, Tomato, Basil"
-                            readOnly={isReadonly}
-                          />
-                        </div>
                       </div>
                     );
                   })}
@@ -921,16 +920,60 @@ export default function GardenWizard() {
               </div>
             )}
 
-            {/* Sub-step 2: Builder ──────────────────────────────────────── */}
+            {/* Sub-step 2: Previous Plants (history per unit) ──────────── */}
             {areaSubStep === 2 && (
+              <div className="space-y-4">
+                <div>
+                  <h2 className="font-semibold text-gray-800 mb-1">
+                    {form.num_areas > 1 ? `${currentArea.name}: ` : ''}What grew here before?
+                  </h2>
+                  <p className="text-sm text-gray-500">
+                    Optional — helps the AI plan crop rotation and avoid repeating plant families.
+                    Skip if this is a new bed or you don't remember.
+                  </p>
+                </div>
+                <div className="space-y-3">
+                  {currentArea.units.map(unit => {
+                    const c = TYPE_COLORS[unit.type_id] || TYPE_COLORS.in_ground;
+                    const typeInfo = GARDEN_TYPES.find(t => t.id === unit.type_id);
+                    return (
+                      <div key={unit.id}
+                        className="rounded-xl border-2 p-4 space-y-2"
+                        style={{ borderColor: c.border, backgroundColor: c.bg + 'cc' }}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg">{typeInfo?.emoji}</span>
+                          <span className="font-semibold text-sm" style={{ color: c.text }}>{unit.label}</span>
+                          {unit.width_ft && unit.length_ft && (
+                            <span className="text-xs" style={{ color: c.text }}>
+                              {unit.width_ft}×{unit.length_ft} ft
+                            </span>
+                          )}
+                        </div>
+                        <input
+                          type="text"
+                          className="input text-sm"
+                          value={unit.previous_plants ?? ''}
+                          onChange={e => updateUnitMaybeSynced(areaIndex, unit.id, { previous_plants: e.target.value })}
+                          placeholder="e.g. Tomatoes, Basil (leave blank if new or unknown)"
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Sub-step 3: Builder ──────────────────────────────────────── */}
+            {areaSubStep === 3 && (
               <div className="space-y-4">
                 <div>
                   <h2 className="font-semibold text-gray-800 mb-1">
                     {form.num_areas > 1 ? `${currentArea.name}: ` : ''}Arrange your layout
                   </h2>
                   <p className="text-sm text-gray-500">
-                    Drag each piece into roughly the right position. This is a spatial diagram,
-                    not an exact map — close enough is perfect.
+                    Drag each piece into position. Previous plantings are shown on each bed — use them
+                    to decide placement for this year's rotation.
                   </p>
                 </div>
 
@@ -954,22 +997,17 @@ export default function GardenWizard() {
                 />
               </div>
             )}
-          </>
-        )}
-
-        {/* ── Step 3: Preferences (per-area) ──────────────────────────────── */}
-        {step === 3 && (
-          <div className="space-y-5">
-            <h2 className="font-semibold text-gray-800">Garden preferences</h2>
-
-            {form.areas.map((area, idx) => (
-              <div
-                key={area.id}
-                className={`space-y-4 ${form.num_areas > 1 ? 'border border-gray-200 rounded-xl p-4' : ''}`}
-              >
-                {form.num_areas > 1 && (
-                  <h3 className="font-medium text-gray-700 text-sm">{area.name}</h3>
-                )}
+            {/* Sub-step 4: Preferences for this area ───────────────────── */}
+            {areaSubStep === 4 && (
+              <div className="space-y-5">
+                <div>
+                  <h2 className="font-semibold text-gray-800 mb-1">
+                    {form.num_areas > 1 ? `${currentArea.name}: ` : ''}Area preferences
+                  </h2>
+                  <p className="text-sm text-gray-500">
+                    These help the AI pick the right plants for this spot.
+                  </p>
+                </div>
 
                 <div>
                   <label className="label">Irrigation method</label>
@@ -977,9 +1015,9 @@ export default function GardenWizard() {
                     {IRRIGATION_OPTIONS.map(irr => (
                       <button
                         key={irr.id}
-                        onClick={() => updateArea(idx, { irrigation_type: irr.id })}
+                        onClick={() => updateArea(areaIndex, { irrigation_type: irr.id })}
                         className={`p-3 rounded-xl border-2 flex items-center gap-2 transition-all ${
-                          area.irrigation_type === irr.id
+                          currentArea.irrigation_type === irr.id
                             ? 'border-garden-500 bg-garden-50'
                             : 'border-gray-200 hover:border-garden-300'
                         }`}
@@ -993,43 +1031,33 @@ export default function GardenWizard() {
 
                 <div>
                   <label className="label">🦌 Wildlife / fencing protection</label>
-                  <p className="text-xs text-gray-500 mb-2">Do you have deer, rabbit, or pest fencing?</p>
+                  <p className="text-xs text-gray-500 mb-2">Does this area have deer, rabbit, or pest fencing?</p>
                   <div className="grid grid-cols-2 gap-2">
                     <button
-                      onClick={() => updateArea(idx, { has_fencing: true })}
+                      onClick={() => updateArea(areaIndex, { has_fencing: true })}
                       className={`p-3 rounded-xl border-2 flex items-center justify-center transition-all ${
-                        area.has_fencing === true ? 'border-garden-500 bg-garden-50' : 'border-gray-200 hover:border-garden-300'
+                        currentArea.has_fencing === true ? 'border-garden-500 bg-garden-50' : 'border-gray-200 hover:border-garden-300'
                       }`}
-                    ><span className="text-sm font-medium">Yes</span></button>
+                    ><span className="text-sm font-medium">Yes, it's protected</span></button>
                     <button
-                      onClick={() => updateArea(idx, { has_fencing: false })}
+                      onClick={() => updateArea(areaIndex, { has_fencing: false })}
                       className={`p-3 rounded-xl border-2 flex items-center justify-center transition-all ${
-                        area.has_fencing === false ? 'border-garden-500 bg-garden-50' : 'border-gray-200 hover:border-garden-300'
+                        currentArea.has_fencing === false ? 'border-garden-500 bg-garden-50' : 'border-gray-200 hover:border-garden-300'
                       }`}
-                    ><span className="text-sm font-medium">No</span></button>
+                    ><span className="text-sm font-medium">No fencing</span></button>
                   </div>
                 </div>
               </div>
-            ))}
-
-            <div>
-              <label className="label">Notes (optional)</label>
-              <textarea
-                className="input resize-none" rows={3}
-                value={form.notes}
-                onChange={e => update('notes', e.target.value)}
-                placeholder="Anything else about your garden space..."
-              />
-            </div>
-          </div>
+            )}
+          </>
         )}
 
-        {/* ── Step 4: Photo ───────────────────────────────────────────────── */}
-        {step === 4 && (
+        {/* ── Step 3: Photo + Notes ───────────────────────────────────────── */}
+        {step === 3 && (
           <div className="space-y-4">
-            <h2 className="font-semibold text-gray-800">Add a reference photo</h2>
+            <h2 className="font-semibold text-gray-800">Almost done!</h2>
             <p className="text-sm text-gray-500">
-              Optional — upload a photo of your garden space to reference while planning.
+              Add an optional photo and any notes about your garden.
             </p>
             {form.photoPreview ? (
               <div className="relative">
@@ -1042,16 +1070,22 @@ export default function GardenWizard() {
             ) : (
               <button
                 onClick={() => photoRef.current?.click()}
-                className="w-full h-40 border-2 border-dashed border-gray-300 rounded-xl hover:border-garden-400 hover:bg-garden-50 transition-all flex flex-col items-center justify-center gap-2 text-gray-500"
+                className="w-full h-36 border-2 border-dashed border-gray-300 rounded-xl hover:border-garden-400 hover:bg-garden-50 transition-all flex flex-col items-center justify-center gap-2 text-gray-500"
               >
                 <span className="text-3xl">📷</span>
-                <span className="text-sm font-medium">Tap to upload photo</span>
+                <span className="text-sm font-medium">Add a reference photo (optional)</span>
                 <span className="text-xs">JPG, PNG, or HEIC up to 10MB</span>
               </button>
             )}
             <input ref={photoRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
-            <div className="bg-blue-50 rounded-lg p-3 text-sm text-blue-700">
-              💡 You can also skip this and add a photo later from your garden page.
+            <div>
+              <label className="label">Notes <span className="text-gray-400 font-normal">(optional)</span></label>
+              <textarea
+                className="input resize-none" rows={3}
+                value={form.notes}
+                onChange={e => update('notes', e.target.value)}
+                placeholder="Anything else about your garden space..."
+              />
             </div>
           </div>
         )}
@@ -1061,7 +1095,7 @@ export default function GardenWizard() {
           {step > 0 && (
             <button onClick={handleBack} className="btn-secondary flex-1">← Back</button>
           )}
-          {step === 4 ? (
+          {step === 3 ? (
             <button onClick={handleSubmit} disabled={saving} className="btn-primary flex-1 disabled:opacity-50">
               {saving ? '🌱 Creating garden...' : '🌱 Create Garden'}
             </button>

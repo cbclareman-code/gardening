@@ -538,7 +538,7 @@ const plants = [
   },
   {
     id: uuidv4(), name: 'Raspberry', scientific_name: 'Rubus idaeus',
-    category: 'fruit', emoji: '🫐', min_zone: 3, max_zone: 9,
+    category: 'fruit', emoji: '🍓', min_zone: 3, max_zone: 9,
     spacing_inches: 24, days_to_maturity: 365, sun_requirement: 'full_sun',
     water_needs: 'moderate', garden_types: 'in_ground',
     companions: 'Garlic,Marigold,Lavender', antagonists: 'Blackberry,Tomato,Potato',

@@ -305,23 +305,41 @@ STRICT RULES — violations will produce a bad plan:
 
 8. VARIETY: Use multiple different plant families across units for biodiversity. Spread crops by type (leaf/root/fruit/herb) across units.
 
+9. SUCCESSION PLANTING: Maximize each unit's productivity across the season. Fast-maturing cool-season crops (Radish 25d, Lettuce 45d, Spinach 40d, Pea 60d) can occupy a unit early then be cleared before warm-season crops go in. When you plan this, assign BOTH the early and late crop to the unit. In the planting_schedule, mark the warm-season crop's succession_of field with the early crop's name. Example: Radish sown Feb, harvested May → Tomato transplanted May into the same unit.
+
+10. CAPACITY WARNINGS: If the selected plants cannot all fit given the space constraints, list the issue in capacity_warnings. Be specific: "Unit 3 (8 sqft) can fit 3 Tomatoes but 5 were planned — reduced to 3."
+
 Return ONLY valid JSON:
 {
   "plant_assignments": {
-    "1": ["Tomato", "Basil", "Marigold"],
+    "1": ["Tomato", "Basil", "Marigold", "Radish"],
     "2": ["Lettuce", "Carrot", "Radish"]
   },
-  "summary": "3-5 paragraphs: what's in each unit and why, companion pairs chosen, sun/space reasoning, rotation decisions, and any important cautions",
+  "summary": "3-5 paragraphs: what's in each unit and why, companion pairs chosen, sun/space reasoning, rotation decisions, succession strategy, and any important cautions",
+  "capacity_warnings": [],
   "planting_schedule": [
+    {
+      "plant_name": "Radish",
+      "unit_id": 1,
+      "area_name": "My Garden",
+      "wave": 1,
+      "sow_indoors": null,
+      "transplant_outdoors": "2026-02-20",
+      "first_harvest": "2026-03-17",
+      "last_harvest": "2026-04-30",
+      "notes": "Direct sow. Clear bed by May 1 to make way for tomatoes."
+    },
     {
       "plant_name": "Tomato",
       "unit_id": 1,
       "area_name": "My Garden",
+      "wave": 2,
+      "succession_of": "Radish",
       "sow_indoors": "2026-03-15",
       "transplant_outdoors": "2026-05-01",
       "first_harvest": "2026-07-15",
       "last_harvest": "2026-09-30",
-      "notes": "Start 6-8 weeks before last frost"
+      "notes": "Transplant after radishes cleared. Start indoors 6-8 weeks before last frost."
     }
   ]
 }
@@ -329,7 +347,7 @@ Omit sow_indoors for direct-sown crops. Use realistic 2026 dates matching zone $
 
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 2000,
+      max_tokens: 4096,
       messages: [{ role: 'user', content: prompt }],
     });
 
@@ -344,7 +362,7 @@ Omit sow_indoors for direct-sown crops. Use realistic 2026 dates matching zone $
       return res.status(500).json({ error: 'AI returned unparseable response — please try again' });
     }
 
-    const { plant_assignments = {}, summary = '', planting_schedule = [] } = rec;
+    const { plant_assignments = {}, summary = '', planting_schedule = [], capacity_warnings = [] } = rec;
 
     // Resolve plant names → IDs; add new plants to garden_plants if not already there
     const existingGP = db.prepare('SELECT plant_id FROM garden_plants WHERE garden_id = ?')
@@ -369,7 +387,7 @@ Omit sow_indoors for direct-sown crops. Use realistic 2026 dates matching zone $
     }
 
     // Save back into layout_data
-    const updatedLayout = { ...layoutData, plant_assignments: assignmentIds, summary, planting_schedule };
+    const updatedLayout = { ...layoutData, plant_assignments: assignmentIds, summary, planting_schedule, capacity_warnings };
     db.prepare("UPDATE gardens SET layout_data = ?, updated_at = datetime('now') WHERE id = ?")
       .run(JSON.stringify(updatedLayout), req.params.gardenId);
 
@@ -382,7 +400,7 @@ Omit sow_indoors for direct-sown crops. Use realistic 2026 dates matching zone $
       WHERE gp.garden_id = ?
     `).all(req.params.gardenId);
 
-    res.json({ garden: updatedGarden, plants: updatedPlants, summary, planting_schedule });
+    res.json({ garden: updatedGarden, plants: updatedPlants, summary, planting_schedule, capacity_warnings });
   } catch (err) {
     console.error('Recommend error:', err);
     res.status(500).json({ error: 'Recommendation failed: ' + err.message });

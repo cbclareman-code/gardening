@@ -19,7 +19,7 @@ function unitBuilderSize(u) {
   };
 }
 
-function AreaMiniMap({ units }) {
+function AreaMiniMap({ units, plantsByUnit = {} }) {
   if (!units.length) return null;
   const rects = units.map(u => {
     const { w, h } = unitBuilderSize(u);
@@ -37,7 +37,7 @@ function AreaMiniMap({ units }) {
   const contentW = maxX - minX;
   const contentH = maxY - minY;
   const MAP_W = 232;
-  const scale = Math.min(MAP_W / contentW, 100 / contentH);
+  const scale = Math.min(MAP_W / contentW, 140 / contentH);
   const mapH = Math.round(contentH * scale) + 1;
 
   return (
@@ -52,11 +52,54 @@ function AreaMiniMap({ units }) {
         const sy = (r.cy - minY) * scale;
         const sw = r.w * scale;
         const sh = r.h * scale;
+
+        // Unique plant emojis assigned to this unit (deduplicated by name)
+        const unitPlants = plantsByUnit[r.id] || [];
+        const seenNames = new Set();
+        const emojis = unitPlants
+          .filter(p => { if (seenNames.has(p.name)) return false; seenNames.add(p.name); return true; })
+          .map(p => p.emoji || '🌱')
+          .slice(0, 6);
+
+        const hasEmojis = emojis.length > 0 && sw > 22 && sh > 14;
+        const cols = emojis.length <= 1 ? 1 : emojis.length <= 4 ? 2 : 3;
+        const rows = Math.ceil(emojis.length / cols);
+        const emojiSize = Math.min(sw / (cols + 0.8), sh / (rows + 0.6), 12);
+        const gridW = cols * emojiSize * 1.15;
+        const gridH = rows * emojiSize * 1.15;
+
         return (
           <g key={r.id} transform={`translate(${sx},${sy}) rotate(${r.rot})`}>
             <rect x={-sw / 2} y={-sh / 2} width={sw} height={sh} rx={2}
               fill={r.c.bg} stroke={r.c.border} strokeWidth={1.5} />
-            {sw > 24 && (
+
+            {/* Bed number in top-left corner */}
+            {sw > 16 && (
+              <text x={-sw / 2 + 2} y={-sh / 2 + 1.5}
+                textAnchor="start" dominantBaseline="hanging"
+                fontSize={Math.min(6, sw / 6)} fill={r.c.text} fontWeight="bold"
+                style={{ pointerEvents: 'none' }}>
+                {r.id}
+              </text>
+            )}
+
+            {/* Plant emojis centered in the bed */}
+            {hasEmojis && emojis.map((emoji, i) => {
+              const col = i % cols;
+              const row = Math.floor(i / cols);
+              const ex = -gridW / 2 + (col + 0.5) * (gridW / cols);
+              const ey = -gridH / 2 + (row + 0.5) * (gridH / rows);
+              return (
+                <text key={i} x={ex} y={ey}
+                  textAnchor="middle" dominantBaseline="central"
+                  fontSize={emojiSize} style={{ pointerEvents: 'none' }}>
+                  {emoji}
+                </text>
+              );
+            })}
+
+            {/* Fall back to label text when no plant assignments */}
+            {!hasEmojis && sw > 24 && (
               <text textAnchor="middle" dy="0.35em" fontSize={Math.min(7, sw / 5)}
                 fill={r.c.text} fontWeight="bold" style={{ pointerEvents: 'none' }}>
                 {r.label}
@@ -76,7 +119,7 @@ const TYPE_LABELS = {
 
 // ── Area carousel (v2 layout_data with units) ────────────────────────────────
 function AreaCarousel({ units, plants, layoutData, onPlantRemove }) {
-  const { plant_assignments = null, summary = null } = layoutData || {};
+  const { plant_assignments = null, summary = null, planting_schedule = [], capacity_warnings = [] } = layoutData || {};
 
   // Build plant lookup by plant_id (the plants table PK)
   const plantById = {};
@@ -111,8 +154,38 @@ function AreaCarousel({ units, plants, layoutData, onPlantRemove }) {
 
   const hasAssignments = plant_assignments && Object.keys(plant_assignments).length > 0;
 
+  // Build per-unit wave grouping from planting_schedule
+  // scheduleByUnit[uid] = { 1: ['Radish'], 2: ['Tomato', 'Basil'] }
+  const scheduleByUnit = {};
+  planting_schedule.forEach(item => {
+    const uid = item.unit_id;
+    if (!scheduleByUnit[uid]) scheduleByUnit[uid] = {};
+    const wave = item.wave || 2;
+    if (!scheduleByUnit[uid][wave]) scheduleByUnit[uid][wave] = [];
+    scheduleByUnit[uid][wave].push(item.plant_name);
+  });
+
   return (
     <div className="space-y-5">
+      {/* Capacity warnings */}
+      {capacity_warnings.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 space-y-1">
+          <div className="text-xs font-semibold text-amber-800 flex items-center gap-1.5">
+            ⚠️ Capacity notes from AI
+          </div>
+          {capacity_warnings.map((w, i) => (
+            <p key={i} className="text-xs text-amber-700">{w}</p>
+          ))}
+        </div>
+      )}
+
+      {/* No plants yet — show prompt but still render the spatial map */}
+      {plants.length === 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-800">
+          Your beds are set up. Use <strong>Get AI Plant Plan</strong> to fill them with an optimized planting strategy, or browse plants to add manually.
+        </div>
+      )}
+
       {/* Unassigned notice */}
       {!hasAssignments && plants.length > 0 && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-800">
@@ -134,12 +207,38 @@ function AreaCarousel({ units, plants, layoutData, onPlantRemove }) {
                   </div>
                 )}
                 {/* Spatial mini-map of this area's unit layout */}
-                <AreaMiniMap units={areaUnits} />
+                <AreaMiniMap units={areaUnits} plantsByUnit={plantsByUnit} />
 
                 {areaUnits.map(u => {
                   const c = TYPE_COLORS[u.type_id] || TYPE_COLORS.in_ground;
                   const unitPlants = plantsByUnit[u.id] || [];
                   const sqft = (parseFloat(u.width_ft) || 0) * (parseFloat(u.length_ft) || 0);
+
+                  // Determine if we have wave/succession data for this unit
+                  const unitSchedule = scheduleByUnit[u.id] || {};
+                  const waveNums = Object.keys(unitSchedule).map(Number).sort();
+                  const hasWaves = waveNums.length > 1;
+
+                  // Build plant rows grouped by wave (if available)
+                  const renderPlantRow = (p) => (
+                    <div key={p.id || p.plant_id} className="flex items-center gap-2 px-3 py-2 group hover:bg-gray-50">
+                      <span className="text-lg leading-none flex-shrink-0">{p.emoji}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium text-gray-800 truncate">{p.name}</div>
+                        <div className="text-xs text-gray-400 flex gap-2">
+                          {p.spacing_inches && <span>{p.spacing_inches}" apart</span>}
+                          {p.days_to_maturity && <span>{p.days_to_maturity}d</span>}
+                        </div>
+                      </div>
+                      {onPlantRemove && (
+                        <button
+                          onClick={() => onPlantRemove(p)}
+                          className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-opacity text-sm flex-shrink-0"
+                          title={`Remove ${p.name}`}
+                        >✕</button>
+                      )}
+                    </div>
+                  );
 
                   return (
                     <div key={u.id} className="rounded-xl border-2 overflow-hidden shadow-sm" style={{ borderColor: c.border }}>
@@ -158,30 +257,28 @@ function AreaCarousel({ units, plants, layoutData, onPlantRemove }) {
                         )}
                       </div>
 
-                      {/* Plant list */}
+                      {/* Plant list — grouped by wave if succession data exists */}
                       <div className="bg-white divide-y divide-gray-50 min-h-10">
                         {unitPlants.length === 0 ? (
                           <p className="text-xs text-gray-400 italic px-3 py-3">No plants assigned</p>
-                        ) : (
-                          unitPlants.map(p => (
-                            <div key={p.id || p.plant_id} className="flex items-center gap-2 px-3 py-2 group hover:bg-gray-50">
-                              <span className="text-lg leading-none flex-shrink-0">{p.emoji}</span>
-                              <div className="flex-1 min-w-0">
-                                <div className="text-sm font-medium text-gray-800 truncate">{p.name}</div>
-                                <div className="text-xs text-gray-400 flex gap-2">
-                                  {p.spacing_inches && <span>{p.spacing_inches}" apart</span>}
-                                  {p.days_to_maturity && <span>{p.days_to_maturity}d</span>}
+                        ) : hasWaves ? (
+                          waveNums.map((wave, wi) => {
+                            const waveNames = new Set((unitSchedule[wave] || []).map(n => n.toLowerCase()));
+                            const wavePlants = unitPlants.filter(p => waveNames.has(p.name.toLowerCase()));
+                            const waveLabel = wave === 1 ? 'Early / cool season' : `Main season${wi > 0 ? ' (after wave ' + (wave - 1) + ')' : ''}`;
+                            if (!wavePlants.length) return null;
+                            return (
+                              <div key={wave}>
+                                <div className="px-3 pt-2 pb-0.5 flex items-center gap-1.5">
+                                  <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{waveLabel}</span>
+                                  {wi > 0 && <span className="text-xs text-gray-300">↩ succession</span>}
                                 </div>
+                                {wavePlants.map(renderPlantRow)}
                               </div>
-                              {onPlantRemove && (
-                                <button
-                                  onClick={() => onPlantRemove(p)}
-                                  className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-opacity text-sm flex-shrink-0"
-                                  title={`Remove ${p.name}`}
-                                >✕</button>
-                              )}
-                            </div>
-                          ))
+                            );
+                          })
+                        ) : (
+                          unitPlants.map(renderPlantRow)
                         )}
                       </div>
                     </div>
@@ -236,19 +333,10 @@ export default function GardenLayout({ garden, plants, onPlantRemove }) {
   try { layoutData = garden?.layout_data ? JSON.parse(garden.layout_data) : null; } catch {}
 
   if (layoutData?.version === 2 && layoutData?.units?.length > 0) {
-    if (!plants || plants.length === 0) {
-      return (
-        <div className="flex flex-col items-center justify-center py-16 text-gray-400">
-          <div className="text-5xl mb-3">🌾</div>
-          <p className="font-medium">No plants yet</p>
-          <p className="text-sm mt-1">Use <strong>Get AI Plant Plan</strong> or browse plants manually</p>
-        </div>
-      );
-    }
     return (
       <AreaCarousel
         units={layoutData.units}
-        plants={plants}
+        plants={plants || []}
         layoutData={layoutData}
         onPlantRemove={onPlantRemove}
       />
