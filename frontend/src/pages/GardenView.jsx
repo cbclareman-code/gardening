@@ -37,6 +37,10 @@ export default function GardenView() {
   const [chatOpen, setChatOpen]       = useState(false);
   const [actionMsg, setActionMsg]     = useState('');
   const [recommending, setRecommending] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [planText, setPlanText]         = useState('');
+  const [feedbackResult, setFeedbackResult] = useState(null);
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
   const [editOpen, setEditOpen]       = useState(false);
   const [editForm, setEditForm]       = useState({});
   const [editSaving, setEditSaving]   = useState(false);
@@ -121,6 +125,20 @@ export default function GardenView() {
       toast(err.response?.data?.error || 'Recommendation failed — try again');
     } finally {
       setRecommending(false);
+    }
+  };
+
+  const handleGetFeedback = async () => {
+    if (!planText.trim()) return;
+    setFeedbackLoading(true);
+    setFeedbackResult(null);
+    try {
+      const { data } = await api.post(`/nli/feedback/${id}`, { user_plan: planText });
+      setFeedbackResult(data);
+    } catch (err) {
+      toast(err.response?.data?.error || 'Feedback failed — try again');
+    } finally {
+      setFeedbackLoading(false);
     }
   };
 
@@ -424,6 +442,59 @@ export default function GardenView() {
               </div>
             </div>
           )}
+
+          {/* "Plan it yourself" feedback panel */}
+          <div className="card p-5 border border-dashed border-gray-200">
+            <button
+              onClick={() => { setFeedbackOpen(o => !o); setFeedbackResult(null); }}
+              className="w-full flex items-center justify-between text-sm font-medium text-gray-600 hover:text-gray-800 transition-colors"
+            >
+              <span>✏️ Have your own plan in mind? Get AI feedback on it</span>
+              <span className="text-gray-400 text-xs">{feedbackOpen ? '▲ hide' : '▼ show'}</span>
+            </button>
+
+            {feedbackOpen && (
+              <div className="mt-4 space-y-3">
+                <p className="text-xs text-gray-500">
+                  Describe what you're thinking in plain language — which plants go where, what your priorities are, etc. The AI will tell you what works well and what to reconsider.
+                </p>
+                <textarea
+                  className="input resize-none text-sm"
+                  rows={4}
+                  value={planText}
+                  onChange={e => setPlanText(e.target.value)}
+                  placeholder={`e.g. "I want to put tomatoes and basil in Bed 1, carrots and beets in Bed 2, and pole beans in Beds 3 and 4. Bed 5 had bush beans last year so I'm thinking lettuce there this spring and then peppers in summer."`}
+                />
+                <button
+                  onClick={handleGetFeedback}
+                  disabled={feedbackLoading || !planText.trim()}
+                  className="btn-primary text-sm px-6 py-2 disabled:opacity-50"
+                >
+                  {feedbackLoading ? '🌱 Analyzing…' : '✨ Get AI Feedback'}
+                </button>
+
+                {feedbackResult && (
+                  <div className="space-y-3 mt-2">
+                    <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+                      <h4 className="font-semibold text-green-800 text-sm mb-2">✅ What works well</h4>
+                      <div className="text-sm text-green-800 whitespace-pre-line leading-relaxed">
+                        {feedbackResult.works_well}
+                      </div>
+                    </div>
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                      <h4 className="font-semibold text-amber-800 text-sm mb-2">💡 What I would change</h4>
+                      <div className="text-sm text-amber-800 whitespace-pre-line leading-relaxed">
+                        {feedbackResult.suggestions}
+                      </div>
+                    </div>
+                    {feedbackResult.overall && (
+                      <p className="text-sm text-gray-600 italic px-1">{feedbackResult.overall}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
 
         </div>
       )}

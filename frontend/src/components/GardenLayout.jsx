@@ -181,7 +181,7 @@ function AreaCarousel({ units, plants, layoutData, onPlantRemove }) {
       {!hasAssignments && plants.length > 0 && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-800">
           <strong>{plants.length} plant{plants.length !== 1 ? 's' : ''} added to your garden.</strong>{' '}
-          Use <strong>Get AI Plant Plan</strong> above to assign them to specific beds based on spacing, companion grouping, sun requirements, and crop rotation. Until then, beds show as empty below.
+          Use <strong>Get AI Plant Plan</strong> above to assign them to specific beds — or scroll down to describe your own plan and get AI feedback on it.
         </div>
       )}
 

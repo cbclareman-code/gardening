@@ -26,6 +26,20 @@ const IRRIGATION_OPTIONS = [
   { id: 'sprinkler', emoji: '⛲', label: 'Sprinkler' },
 ];
 
+const COMMON_CROPS = [
+  'Tomatoes','Cherry tomatoes','Peppers','Eggplant','Tomatillos',
+  'Cucumbers','Zucchini','Summer squash','Winter squash','Pumpkins','Melons','Corn',
+  'Beans','Bush beans','Pole beans','Runner beans','Soybeans',
+  'Peas','Snow peas','Sugar snap peas',
+  'Lettuce','Spinach','Arugula','Swiss chard','Kale','Collards',
+  'Broccoli','Cabbage','Cauliflower','Brussels sprouts','Kohlrabi','Bok choy','Turnips',
+  'Carrots','Beets','Parsnips','Radishes','Daikon',
+  'Onions','Garlic','Leeks','Shallots','Chives',
+  'Potatoes','Sweet potatoes',
+  'Basil','Cilantro','Parsley','Dill','Fennel','Mint','Rosemary','Thyme','Sage','Oregano','Tarragon','Lemon balm',
+  'Strawberries','Sunflowers','Marigolds','Nasturtiums','Borage','Zinnias',
+];
+
 // Per-type colors used in the builder and dimension cards
 const TYPE_COLORS = {
   raised_bed:   { bg: '#fef3c7', border: '#d97706', text: '#92400e' },
@@ -106,7 +120,7 @@ function rotatedBounds(w, h, deg) {
   return { bw: w * cos + h * sin, bh: w * sin + h * cos };
 }
 
-function GardenBuilder({ units, onLayoutChange }) {
+function GardenBuilder({ units, onLayoutChange, onUnitEdit }) {
   const [pos, setPos] = useState(() => {
     const p = {};
     units.forEach(u => { p[u.id] = { x: u.x ?? 12, y: u.y ?? 12 }; });
@@ -118,6 +132,29 @@ function GardenBuilder({ units, onLayoutChange }) {
     return r;
   });
   const [selectedId, setSelectedId] = useState(null);
+  const [editingUnit, setEditingUnit] = useState(null); // { id, width_ft, length_ft, previous_plants }
+
+  const openEdit = (unit, e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setEditingUnit({
+      id: unit.id,
+      label: unit.label,
+      width_ft: unit.width_ft ?? '',
+      length_ft: unit.length_ft ?? '',
+      previous_plants: unit.previous_plants ?? '',
+    });
+  };
+
+  const saveEdit = () => {
+    if (!editingUnit) return;
+    onUnitEdit?.(editingUnit.id, {
+      width_ft:  editingUnit.width_ft,
+      length_ft: editingUnit.length_ft,
+      previous_plants: editingUnit.previous_plants,
+    });
+    setEditingUnit(null);
+  };
 
   // Seed new units if the list grows
   useEffect(() => {
@@ -210,7 +247,8 @@ function GardenBuilder({ units, onLayoutChange }) {
               className={`absolute flex items-center justify-center cursor-grab active:cursor-grabbing ${isSelected ? 'z-10' : ''}`}
               style={{ left: p.x, top: p.y, width: bw, height: bh }}
               onPointerDown={e => onPointerDown(e, unit.id)}
-              title={unit.previous_plants ? `Previously grew: ${unit.previous_plants}` : ''}
+              onDoubleClick={e => openEdit(unit, e)}
+              title={unit.previous_plants ? `Previously grew: ${unit.previous_plants} — double-click to edit` : 'Double-click to edit dimensions & history'}
             >
               <div
                 className={`rounded-lg border-2 flex flex-col items-center justify-center gap-0.5 ${isSelected ? 'ring-2 ring-offset-1 ring-blue-400' : ''}`}
@@ -265,9 +303,59 @@ function GardenBuilder({ units, onLayoutChange }) {
           )}
         </div>
       </div>
+
+      {/* Hint row */}
       <p className="text-xs text-gray-400 mt-2 text-center">
-        Tap to select · drag to arrange · ↻ to rotate
+        Tap to select · drag to arrange · ↻ to rotate · <strong>double-click</strong> to edit · hover to see crop history
       </p>
+
+      {/* Double-click edit overlay */}
+      {editingUnit && (
+        <div className="mt-3 rounded-xl border-2 border-garden-300 bg-garden-50 p-4 space-y-3 shadow-md">
+          <div className="flex items-center justify-between">
+            <h4 className="font-semibold text-sm text-garden-800">Edit {editingUnit.label}</h4>
+            <button onClick={() => setEditingUnit(null)} className="text-gray-400 hover:text-gray-600 text-lg leading-none">✕</button>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label text-xs">Width (ft)</label>
+              <input
+                type="number" className="input" min="0.5" step="0.5"
+                value={editingUnit.width_ft}
+                onChange={e => setEditingUnit(u => ({ ...u, width_ft: e.target.value }))}
+                placeholder="e.g. 2"
+              />
+            </div>
+            <div>
+              <label className="label text-xs">Length (ft)</label>
+              <input
+                type="number" className="input" min="0.5" step="0.5"
+                value={editingUnit.length_ft}
+                onChange={e => setEditingUnit(u => ({ ...u, length_ft: e.target.value }))}
+                placeholder="e.g. 6"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="label text-xs">What grew here before? <span className="text-gray-400 font-normal">(optional)</span></label>
+            <input
+              type="text" className="input text-sm" list="crops-datalist"
+              value={editingUnit.previous_plants}
+              onChange={e => setEditingUnit(u => ({ ...u, previous_plants: e.target.value }))}
+              placeholder="e.g. Tomatoes, Basil"
+            />
+            <p className="text-xs text-gray-400 mt-1">List both if crops rotated mid-season (e.g. "Bush beans, Bok choy")</p>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={saveEdit} className="btn-primary flex-1 text-sm py-2">Save</button>
+            <button onClick={() => setEditingUnit(null)} className="btn-secondary text-sm px-4 py-2">Cancel</button>
+          </div>
+        </div>
+      )}
+
+      <datalist id="crops-datalist">
+        {COMMON_CROPS.map(c => <option key={c} value={c} />)}
+      </datalist>
     </div>
   );
 }
@@ -925,14 +1013,19 @@ export default function GardenWizard() {
                     <label className="label">What grew here before? <span className="text-gray-400 font-normal">(optional)</span></label>
                     <p className="text-xs text-gray-500 mb-2">
                       Helps the AI plan crop rotation — leave blank if new or unknown.
+                      If crops rotated mid-season, list both (e.g. "Bush beans, Bok choy").
                     </p>
                     <input
                       type="text"
                       className="input text-sm"
+                      list="crops-datalist-dims"
                       value={currentArea.units[0]?.previous_plants ?? ''}
                       onChange={e => updateUnit(areaIndex, currentArea.units[0].id, { previous_plants: e.target.value })}
                       placeholder="e.g. Tomatoes, Basil"
                     />
+                    <datalist id="crops-datalist-dims">
+                      {COMMON_CROPS.map(c => <option key={c} value={c} />)}
+                    </datalist>
                   </div>
                 )}
 
@@ -951,6 +1044,10 @@ export default function GardenWizard() {
                     <span className="font-medium text-gray-600">Leave blank to skip.</span>
                   </p>
                 </div>
+                <p className="text-xs text-gray-500 -mt-1">
+                  If two crops rotated in the same bed at different times of year, list both
+                  (e.g. "Bush beans, Bok choy") — both matter for crop rotation.
+                </p>
                 <div className="space-y-3">
                   {currentArea.units.map(unit => {
                     const c = TYPE_COLORS[unit.type_id] || TYPE_COLORS.in_ground;
@@ -972,6 +1069,7 @@ export default function GardenWizard() {
                         <input
                           type="text"
                           className="input text-sm"
+                          list="crops-datalist-history"
                           value={unit.previous_plants ?? ''}
                           onChange={e => updateUnitMaybeSynced(areaIndex, unit.id, { previous_plants: e.target.value })}
                           placeholder="e.g. Tomatoes, Basil (leave blank if new or unknown)"
@@ -980,6 +1078,9 @@ export default function GardenWizard() {
                     );
                   })}
                 </div>
+                <datalist id="crops-datalist-history">
+                  {COMMON_CROPS.map(c => <option key={c} value={c} />)}
+                </datalist>
               </div>
             )}
 
@@ -991,13 +1092,14 @@ export default function GardenWizard() {
                     {form.num_areas > 1 ? `${currentArea.name}: ` : ''}Arrange your layout
                   </h2>
                   <p className="text-sm text-gray-500">
-                    Drag each piece into position. Previous plantings are shown on each bed — use them
-                    to decide placement for this year's rotation.
+                    Drag each piece into position. <strong>Hover</strong> a bed to see what grew there before.
+                    <strong> Double-click</strong> a bed to edit its size or crop history.
                   </p>
                 </div>
 
                 <GardenBuilder
                   units={currentArea.units}
+                  onUnitEdit={(unitId, changes) => updateUnit(areaIndex, unitId, changes)}
                   onLayoutChange={(positions, rots) => {
                     setForm(f => {
                       const areas = [...f.areas];
@@ -1096,6 +1198,9 @@ export default function GardenWizard() {
                 <span className="text-xs">JPG, PNG, or HEIC up to 10MB</span>
               </button>
             )}
+            <p className="text-xs text-gray-400">
+              📷 Your photo is stored for <strong>your reference</strong> and displays in your garden profile. The AI planner uses the details you entered (zone, dimensions, sun) — not image analysis.
+            </p>
             <input ref={photoRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
             <div>
               <label className="label">Notes <span className="text-gray-400 font-normal">(optional)</span></label>

@@ -425,4 +425,83 @@ Omit sow_indoors for direct-sown crops. Use realistic ${new Date().getFullYear()
   }
 });
 
+// ── AI feedback on a user-described planting plan ────────────────────────────
+router.post('/feedback/:gardenId', async (req, res) => {
+  const apiKey = process.env.ANTHROPIC_API_KEY || '';
+  if (!apiKey || apiKey.includes('your-')) {
+    return res.status(500).json({ error: 'Anthropic API key not configured' });
+  }
+
+  try {
+    const garden = db.prepare('SELECT * FROM gardens WHERE id = ? AND user_id = ?')
+      .get(req.params.gardenId, req.user.id);
+    if (!garden) return res.status(404).json({ error: 'Garden not found' });
+
+    const { user_plan } = req.body;
+    if (!user_plan?.trim()) return res.status(400).json({ error: 'user_plan is required' });
+
+    let layoutData = {};
+    try { layoutData = JSON.parse(garden.layout_data || '{}'); } catch {}
+    const units = layoutData.units || [];
+    const zone = String(garden.hardiness_zone || '6');
+    const frost = FROST_DATES[zone] || FROST_DATES['6'];
+
+    const unitSummary = units.map(u => {
+      const wft = parseFloat(u.width_ft) || 0;
+      const lft = parseFloat(u.length_ft) || 0;
+      const sqft = (wft * lft).toFixed(1);
+      const prev = u.previous_plants ? `previously grew: ${u.previous_plants}` : 'no prior history';
+      return `Bed ${u.id} "${u.label}" ${wft}×${lft}ft = ${sqft} sqft | sun: ${u.sun_exposure || 'full_sun'} | ${prev}`;
+    }).join('\n');
+
+    const allPlants = db.prepare('SELECT name, category, spacing_inches, companions, antagonists, sun_requirement FROM plants ORDER BY name').all();
+    const plantCatalog = allPlants.map(p =>
+      `${p.name} | ${p.category} | spacing: ${p.spacing_inches}" | sun: ${p.sun_requirement} | companions: ${p.companions || 'none'} | antagonists: ${p.antagonists || 'none'}`
+    ).join('\n');
+
+    const prompt = `You are an expert organic garden planner reviewing a gardener's proposed planting plan.
+
+GARDEN: ${garden.name}
+Zone: ${zone} | Last spring frost: ${frost.last} | First fall frost: ${frost.first}
+Irrigation: ${garden.irrigation_type}
+
+BEDS:
+${unitSummary || '(no beds defined yet)'}
+
+PLANT REFERENCE:
+${plantCatalog}
+
+THE GARDENER'S PLAN:
+${user_plan.trim()}
+
+Evaluate this plan and respond with valid JSON only:
+{
+  "works_well": "2-4 bullet points (use \\n• to separate) of what the gardener got right — companion pairs, rotation choices, good space use, etc.",
+  "suggestions": "2-4 bullet points (use \\n• to separate) of specific, actionable improvements — antagonist conflicts to fix, capacity issues, better companions, rotation improvements, succession ideas.",
+  "overall": "1-2 sentence encouraging summary."
+}`;
+
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 1024,
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    const raw = response.content[0].text.trim()
+      .replace(/^```json?\n?/i, '').replace(/\n?```$/i, '');
+    let feedback;
+    try {
+      feedback = JSON.parse(raw);
+    } catch {
+      return res.status(500).json({ error: 'AI returned unparseable response — try again' });
+    }
+
+    res.json(feedback);
+  } catch (err) {
+    console.error('Feedback error:', err);
+    if (err.status === 401) return res.status(500).json({ error: 'Invalid Anthropic API key' });
+    res.status(500).json({ error: 'Feedback failed: ' + err.message });
+  }
+});
+
 module.exports = router;
