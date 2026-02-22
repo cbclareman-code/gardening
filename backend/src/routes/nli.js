@@ -23,7 +23,7 @@ const FROST_DATES = {
 
 function buildSystemPrompt(garden, plants) {
   const plantList = plants.map(p =>
-    `- ${p.name} (${p.emoji}) qty: ${p.quantity}`
+    `- ${p.name}${p.notes ? ` (variety: ${p.notes})` : ''} (${p.emoji}) qty: ${p.quantity}`
   ).join('\n');
 
   return `You are ChatGRD, an expert garden planning assistant. You help users plan, optimize, and manage their gardens through natural conversation.
@@ -262,6 +262,16 @@ router.post('/recommend/:gardenId', async (req, res) => {
     const zone = String(garden.hardiness_zone || '6');
     const frost = FROST_DATES[zone] || FROST_DATES['6'];
 
+    // Collect any variety notes the user added to pre-selected plants
+    const varietyNotes = db.prepare(`
+      SELECT p.name, gp.notes as variety_note
+      FROM garden_plants gp JOIN plants p ON gp.plant_id = p.id
+      WHERE gp.garden_id = ? AND gp.notes IS NOT NULL AND gp.notes != ''
+    `).all(req.params.gardenId);
+    const varietyContext = varietyNotes.length
+      ? `\nGARDENER'S VARIETY PREFERENCES: ${varietyNotes.map(v => `${v.name} → ${v.variety_note}`).join('; ')}. Account for these varieties when estimating spacing, growth habit (determinate/indeterminate), and sun needs.`
+      : '';
+
     // Group shared-soil units so the AI knows to treat them as one rotation zone
     const sharedSoilUnitIds = units.filter(u => u.shared_soil).map(u => u.id);
     const sharedSoilNote = sharedSoilUnitIds.length > 1
@@ -292,7 +302,7 @@ router.post('/recommend/:gardenId', async (req, res) => {
 
 GARDEN: ${garden.name}
 Zone: ${zone} | Last spring frost: ${frost.last} | First fall frost: ${frost.first}
-Irrigation: ${garden.irrigation_type} | Notes: ${garden.notes || 'none'}
+Irrigation: ${garden.irrigation_type} | Notes: ${garden.notes || 'none'}${varietyContext}
 
 GARDEN UNITS:
 ${unitSummary}${sharedSoilNote}

@@ -41,6 +41,14 @@ export default function GardenView() {
   const [planText, setPlanText]         = useState('');
   const [feedbackResult, setFeedbackResult] = useState(null);
   const [feedbackLoading, setFeedbackLoading] = useState(false);
+  // Custom plant
+  const [customPlantOpen, setCustomPlantOpen]       = useState(false);
+  const [customPlantName, setCustomPlantName]       = useState('');
+  const [customPlantCategory, setCustomPlantCategory] = useState('vegetable');
+  const [customPlantAdding, setCustomPlantAdding]   = useState(false);
+  // Variety note editing
+  const [editingVarietyId, setEditingVarietyId]     = useState(null);
+  const [varietyDraft, setVarietyDraft]             = useState('');
   const [editOpen, setEditOpen]       = useState(false);
   const [editForm, setEditForm]       = useState({});
   const [editSaving, setEditSaving]   = useState(false);
@@ -139,6 +147,40 @@ export default function GardenView() {
       toast(err.response?.data?.error || 'Feedback failed — try again');
     } finally {
       setFeedbackLoading(false);
+    }
+  };
+
+  const handleAddCustomPlant = async () => {
+    if (!customPlantName.trim()) return;
+    setCustomPlantAdding(true);
+    try {
+      const { data } = await api.post('/plants/custom', {
+        name: customPlantName.trim(),
+        category: customPlantCategory,
+      });
+      const plant = data.plant;
+      setAllPlants(prev => [plant, ...prev]);
+      // Immediately add to the garden
+      const { data: gpData } = await api.post(`/gardens/${id}/plants`, { plant_id: plant.id });
+      setGardenPlants(prev => [...prev, { ...gpData.garden_plant, ...plant, plant_id: plant.id }]);
+      toast(`Added "${plant.name}" to your garden`);
+      setCustomPlantOpen(false);
+      setCustomPlantName('');
+      setSearch('');
+    } catch (err) {
+      toast(err.response?.data?.error || 'Failed to add custom plant');
+    } finally {
+      setCustomPlantAdding(false);
+    }
+  };
+
+  const handleSaveVariety = async (gpId) => {
+    try {
+      await api.put(`/gardens/${id}/plants/${gpId}`, { notes: varietyDraft });
+      setGardenPlants(prev => prev.map(gp => gp.id === gpId ? { ...gp, notes: varietyDraft } : gp));
+      setEditingVarietyId(null);
+    } catch {
+      toast('Failed to save variety — try again');
     }
   };
 
@@ -419,24 +461,49 @@ export default function GardenView() {
                   + Add more
                 </button>
               </div>
-              <div className="space-y-1">
+              <div className="space-y-0">
                 {gardenPlants.map(gp => (
-                  <div key={gp.id} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xl">{gp.emoji}</span>
-                      <div>
-                        <span className="font-medium text-sm">{gp.name}</span>
-                        <span className="text-xs text-gray-500 ml-2 capitalize">{gp.category}</span>
+                  <div key={gp.id} className="py-2 border-b border-gray-100 last:border-0">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xl">{gp.emoji}</span>
+                        <div>
+                          <span className="font-medium text-sm">{gp.name}</span>
+                          {gp.user_id && <span className="text-xs text-garden-600 ml-1.5">custom</span>}
+                          <span className="text-xs text-gray-500 ml-2 capitalize">{gp.category}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 text-xs text-gray-500">
+                        {gp.days_to_maturity && <span>{gp.days_to_maturity}d</span>}
+                        {gp.spacing_inches && <span>{gp.spacing_inches}" spacing</span>}
+                        <button
+                          onClick={() => togglePlant({ id: gp.plant_id, name: gp.name })}
+                          className="text-red-400 hover:text-red-600 transition-colors"
+                        >Remove</button>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3 text-xs text-gray-500">
-                      {gp.days_to_maturity && <span>{gp.days_to_maturity}d</span>}
-                      {gp.spacing_inches && <span>{gp.spacing_inches}" spacing</span>}
+                    {/* Variety note — inline editable */}
+                    {editingVarietyId === gp.id ? (
+                      <div className="mt-1 flex items-center gap-2 ml-8">
+                        <input
+                          autoFocus
+                          className="input text-xs py-1 flex-1"
+                          value={varietyDraft}
+                          onChange={e => setVarietyDraft(e.target.value)}
+                          placeholder="e.g. Sungold, Cherokee Purple, Brandywine"
+                          onKeyDown={e => { if (e.key === 'Enter') handleSaveVariety(gp.id); if (e.key === 'Escape') setEditingVarietyId(null); }}
+                        />
+                        <button onClick={() => handleSaveVariety(gp.id)} className="text-xs text-garden-600 font-medium hover:text-garden-800">Save</button>
+                        <button onClick={() => setEditingVarietyId(null)} className="text-xs text-gray-400 hover:text-gray-600">Cancel</button>
+                      </div>
+                    ) : (
                       <button
-                        onClick={() => togglePlant({ id: gp.plant_id, name: gp.name })}
-                        className="text-red-400 hover:text-red-600 transition-colors"
-                      >Remove</button>
-                    </div>
+                        className="mt-0.5 ml-8 text-xs text-gray-400 hover:text-garden-600 transition-colors"
+                        onClick={() => { setEditingVarietyId(gp.id); setVarietyDraft(gp.notes || ''); }}
+                      >
+                        {gp.notes ? `variety: ${gp.notes} ✏️` : '+ add variety'}
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
@@ -528,7 +595,7 @@ export default function GardenView() {
             <input
               type="search"
               value={search}
-              onChange={e => setSearch(e.target.value)}
+              onChange={e => { setSearch(e.target.value); setCustomPlantName(e.target.value); setCustomPlantOpen(false); }}
               placeholder="Search plants…"
               className="input flex-1"
             />
@@ -554,11 +621,69 @@ export default function GardenView() {
                 plant={plant}
                 selected={gardenPlantIds.has(plant.id)}
                 onToggle={togglePlant}
+                isCustom={!!plant.user_id}
               />
             ))}
           </div>
 
-          {filteredPlants.length === 0 && (
+          {/* No results: offer to add as custom plant */}
+          {filteredPlants.length === 0 && search && (
+            <div className="text-center py-8 space-y-3">
+              <div className="text-4xl">🔍</div>
+              <p className="text-gray-500 text-sm">No plants found for "<strong>{search}</strong>"</p>
+              {!customPlantOpen ? (
+                <button
+                  onClick={() => setCustomPlantOpen(true)}
+                  className="btn-primary text-sm px-5 py-2"
+                >
+                  + Add "{search}" as a custom plant
+                </button>
+              ) : (
+                <div className="max-w-sm mx-auto text-left bg-garden-50 border border-garden-200 rounded-xl p-4 space-y-3">
+                  <h4 className="font-semibold text-garden-800 text-sm">Add custom plant</h4>
+                  <div>
+                    <label className="label text-xs">Plant name</label>
+                    <input
+                      className="input text-sm"
+                      value={customPlantName}
+                      onChange={e => setCustomPlantName(e.target.value)}
+                      placeholder="e.g. Summer Fireworks Coleus"
+                    />
+                  </div>
+                  <div>
+                    <label className="label text-xs">Category</label>
+                    <select
+                      className="input text-sm"
+                      value={customPlantCategory}
+                      onChange={e => setCustomPlantCategory(e.target.value)}
+                    >
+                      <option value="vegetable">Vegetable</option>
+                      <option value="herb">Herb</option>
+                      <option value="fruit">Fruit</option>
+                      <option value="flower">Flower / Ornamental</option>
+                    </select>
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    The AI will treat this plant based on its name and category. For best results, be specific (e.g. "Summer Fireworks Coleus" rather than just "Coleus").
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleAddCustomPlant}
+                      disabled={customPlantAdding || !customPlantName.trim()}
+                      className="btn-primary flex-1 text-sm py-2 disabled:opacity-50"
+                    >
+                      {customPlantAdding ? 'Adding…' : 'Add to garden'}
+                    </button>
+                    <button onClick={() => setCustomPlantOpen(false)} className="btn-secondary text-sm px-3 py-2">
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {filteredPlants.length === 0 && !search && (
             <div className="text-center py-12 text-gray-500">
               <div className="text-4xl mb-2">🔍</div>
               <p>No plants match your filters.</p>

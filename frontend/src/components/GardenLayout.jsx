@@ -217,6 +217,7 @@ function AreaCarousel({ units, plants, layoutData, onPlantRemove }) {
                       <span className="text-lg leading-none flex-shrink-0">{p.emoji}</span>
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-medium text-gray-800 truncate">{p.name}</div>
+                        {p.notes && <div className="text-xs text-garden-600 italic truncate">{p.notes}</div>}
                         <div className="text-xs text-gray-400 flex gap-2">
                           {p.spacing_inches && <span>{p.spacing_inches}" apart</span>}
                           {p.days_to_maturity && <span>{p.days_to_maturity}d</span>}

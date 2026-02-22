@@ -90,3 +90,8 @@ db.exec(`
 `);
 
 module.exports = db;
+
+// ── Idempotent migrations ───────────────────────────────────────────────────
+// Add user_id to plants so users can create custom plants
+try { db.exec("ALTER TABLE plants ADD COLUMN user_id TEXT REFERENCES users(id) ON DELETE CASCADE"); } catch {}
+// Add variety_note to garden_plants (stored as notes field, already exists)

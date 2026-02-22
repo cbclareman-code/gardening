@@ -3,7 +3,7 @@ import React from 'react';
 const SUN_ICONS = { full_sun: '☀️', part_shade: '⛅', shade: '🌥️' };
 const WATER_ICONS = { low: '💧', moderate: '💧💧', high: '💧💧💧' };
 
-export default function PlantCard({ plant, selected, onToggle, compact = false }) {
+export default function PlantCard({ plant, selected, onToggle, compact = false, isCustom = false }) {
   if (compact) {
     return (
       <div
@@ -48,11 +48,18 @@ export default function PlantCard({ plant, selected, onToggle, compact = false }
         >
           {plant.emoji}
         </div>
-        {selected && (
-          <div className="bg-garden-500 text-white text-xs px-2 py-1 rounded-full font-medium">
-            Added ✓
-          </div>
-        )}
+        <div className="flex flex-col items-end gap-1">
+          {isCustom && (
+            <div className="bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-full font-medium">
+              custom
+            </div>
+          )}
+          {selected && (
+            <div className="bg-garden-500 text-white text-xs px-2 py-1 rounded-full font-medium">
+              Added ✓
+            </div>
+          )}
+        </div>
       </div>
 
       <h3 className="font-semibold text-gray-900 mb-0.5">{plant.name}</h3>
