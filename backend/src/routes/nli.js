@@ -238,6 +238,14 @@ router.get('/history/:gardenId', async (req, res) => {
 
 // ── AI-generated planting recommendation ─────────────────────────────────────
 router.post('/recommend/:gardenId', async (req, res) => {
+  // Fail fast if the API key is obviously a placeholder
+  const apiKey = process.env.ANTHROPIC_API_KEY || '';
+  if (!apiKey || apiKey.includes('your-') || apiKey === 'sk-ant-') {
+    return res.status(500).json({
+      error: 'Anthropic API key not configured — add your key to backend/.env as ANTHROPIC_API_KEY=sk-ant-... and restart the server'
+    });
+  }
+
   try {
     const garden = db.prepare('SELECT * FROM gardens WHERE id = ? AND user_id = ?')
       .get(req.params.gardenId, req.user.id);
@@ -254,6 +262,12 @@ router.post('/recommend/:gardenId', async (req, res) => {
     const zone = String(garden.hardiness_zone || '6');
     const frost = FROST_DATES[zone] || FROST_DATES['6'];
 
+    // Group shared-soil units so the AI knows to treat them as one rotation zone
+    const sharedSoilUnitIds = units.filter(u => u.shared_soil).map(u => u.id);
+    const sharedSoilNote = sharedSoilUnitIds.length > 1
+      ? `\nSHARED SOIL NOTE: Units ${sharedSoilUnitIds.join(', ')} share continuous soil. Treat them as ONE growing zone for crop rotation — do not repeat the same plant family across any of these units.`
+      : '';
+
     // Build detailed per-unit summary including capacity, sun, and history
     const unitSummary = units.map(u => {
       const wft = parseFloat(u.width_ft) || 0;
@@ -262,7 +276,8 @@ router.post('/recommend/:gardenId', async (req, res) => {
       const sun = u.sun_exposure || garden.sun_exposure || 'full_sun';
       const prev = u.previous_plants ? `previously grew: ${u.previous_plants}` : 'no prior planting history';
       const fenced = u.has_fencing ? ', fenced' : '';
-      return `Unit ${u.id} "${u.label}" [${u.type_id}] ${wft}ft × ${lft}ft = ${sqft} sqft | sun: ${sun}${fenced} | ${prev}`;
+      const shared = u.shared_soil ? ' [SHARED SOIL]' : '';
+      return `Unit ${u.id} "${u.label}" [${u.type_id}] ${wft}ft × ${lft}ft = ${sqft} sqft | sun: ${sun}${fenced}${shared} | ${prev}`;
     }).join('\n');
 
     // Plant catalog with capacity hints per spacing
@@ -280,12 +295,12 @@ Zone: ${zone} | Last spring frost: ${frost.last} | First fall frost: ${frost.fir
 Irrigation: ${garden.irrigation_type} | Notes: ${garden.notes || 'none'}
 
 GARDEN UNITS:
-${unitSummary}
+${unitSummary}${sharedSoilNote}
 
 PLANT CATALOG (use exact names from this list only):
 ${plantCatalog}
 
-TODAY: February 20, 2026
+TODAY: ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
 
 STRICT RULES — violations will produce a bad plan:
 
@@ -324,9 +339,9 @@ Return ONLY valid JSON:
       "area_name": "My Garden",
       "wave": 1,
       "sow_indoors": null,
-      "transplant_outdoors": "2026-02-20",
-      "first_harvest": "2026-03-17",
-      "last_harvest": "2026-04-30",
+      "transplant_outdoors": "${new Date().getFullYear()}-02-20",
+      "first_harvest": "${new Date().getFullYear()}-03-17",
+      "last_harvest": "${new Date().getFullYear()}-04-30",
       "notes": "Direct sow. Clear bed by May 1 to make way for tomatoes."
     },
     {
@@ -335,15 +350,15 @@ Return ONLY valid JSON:
       "area_name": "My Garden",
       "wave": 2,
       "succession_of": "Radish",
-      "sow_indoors": "2026-03-15",
-      "transplant_outdoors": "2026-05-01",
-      "first_harvest": "2026-07-15",
-      "last_harvest": "2026-09-30",
+      "sow_indoors": "${new Date().getFullYear()}-03-15",
+      "transplant_outdoors": "${new Date().getFullYear()}-05-01",
+      "first_harvest": "${new Date().getFullYear()}-07-15",
+      "last_harvest": "${new Date().getFullYear()}-09-30",
       "notes": "Transplant after radishes cleared. Start indoors 6-8 weeks before last frost."
     }
   ]
 }
-Omit sow_indoors for direct-sown crops. Use realistic 2026 dates matching zone ${zone}.`;
+Omit sow_indoors for direct-sown crops. Use realistic ${new Date().getFullYear()} dates matching zone ${zone}.`;
 
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
@@ -403,6 +418,9 @@ Omit sow_indoors for direct-sown crops. Use realistic 2026 dates matching zone $
     res.json({ garden: updatedGarden, plants: updatedPlants, summary, planting_schedule, capacity_warnings });
   } catch (err) {
     console.error('Recommend error:', err);
+    if (err.status === 401 || err.code === 'authentication_error') {
+      return res.status(500).json({ error: 'Invalid Anthropic API key — set ANTHROPIC_API_KEY in backend/.env and restart the server' });
+    }
     res.status(500).json({ error: 'Recommendation failed: ' + err.message });
   }
 });

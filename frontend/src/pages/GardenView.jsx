@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import api from '../utils/api';
 import PlantCard from '../components/PlantCard';
@@ -9,8 +9,19 @@ import NLIChat from '../components/NLIChat';
 const CATEGORY_FILTERS = ['all', 'vegetable', 'herb', 'fruit', 'flower'];
 const GARDEN_TYPE_ICONS = {
   in_ground: '🌿', raised_bed: '🪵', container: '🪴', vertical: '🪜',
-  hugelkultur: '⛰️', straw_bale: '🌾', greenhouse: '🏡',
+  hugelkultur: '⛰️', straw_bale: '🌾', greenhouse: '🏠',
 };
+
+const PLAN_STATUS_MESSAGES = [
+  'Reviewing your beds and available space…',
+  'Calculating capacity per unit…',
+  'Selecting companion plant groupings…',
+  'Checking sun requirements per bed…',
+  'Planning crop rotation based on history…',
+  'Scheduling succession harvests…',
+  'Avoiding antagonist pairs…',
+  'Finalising your planting plan…',
+];
 
 export default function GardenView() {
   const { id } = useParams();
@@ -29,6 +40,21 @@ export default function GardenView() {
   const [editOpen, setEditOpen]       = useState(false);
   const [editForm, setEditForm]       = useState({});
   const [editSaving, setEditSaving]   = useState(false);
+  const [planStatusIdx, setPlanStatusIdx] = useState(0);
+  const statusIntervalRef = useRef(null);
+
+  // Cycle through status messages while the AI plan is loading
+  useEffect(() => {
+    if (recommending) {
+      setPlanStatusIdx(0);
+      statusIntervalRef.current = setInterval(() => {
+        setPlanStatusIdx(i => (i + 1) % PLAN_STATUS_MESSAGES.length);
+      }, 3500);
+    } else {
+      clearInterval(statusIntervalRef.current);
+    }
+    return () => clearInterval(statusIntervalRef.current);
+  }, [recommending]);
 
   // ── load ─────────────────────────────────────────────────────────────────
   const loadGarden = useCallback(async () => {
@@ -301,7 +327,14 @@ export default function GardenView() {
                 >
                   {recommending ? '🌱 Building your plan…' : '✨ Get AI Plant Plan'}
                 </button>
-                {recommending && <p className="text-xs text-gray-400">This usually takes 15–30 seconds…</p>}
+                {recommending && (
+                  <div className="space-y-1">
+                    <p className="text-sm text-garden-700 font-medium animate-pulse">
+                      {PLAN_STATUS_MESSAGES[planStatusIdx]}
+                    </p>
+                    <p className="text-xs text-gray-400">Usually takes 15–30 seconds</p>
+                  </div>
+                )}
                 <div>
                   <button onClick={() => setTab('plants')} className="text-sm text-garden-600 hover:underline">
                     Or browse plants to add manually →
@@ -342,6 +375,9 @@ export default function GardenView() {
               >
                 {recommending ? '🌱 Planning…' : hasPlan ? '↺ Refresh Plan' : '✨ Get AI Plant Plan'}
               </button>
+              {recommending && (
+                <p className="text-xs text-gray-500 mt-1 animate-pulse">{PLAN_STATUS_MESSAGES[planStatusIdx]}</p>
+              )}
             </div>
           )}
 

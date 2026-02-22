@@ -11,7 +11,7 @@ const GARDEN_TYPE_ICONS = {
   vertical: '🪜',
   hugelkultur: '⛰️',
   straw_bale: '🌾',
-  greenhouse: '🏡',
+  greenhouse: '🏠',
 };
 
 export default function Dashboard() {

@@ -10,7 +10,7 @@ const GARDEN_TYPES = [
   { id: 'vertical',    emoji: '🧱', label: 'Vertical',    desc: 'Walls, trellises, and tower systems' },
   { id: 'hugelkultur', emoji: '🏔️', label: 'Hügelkultur', desc: 'Mounded beds over buried logs' },
   { id: 'straw_bale',  emoji: '🌾', label: 'Straw Bale',  desc: 'Conditioned straw bales as grow beds' },
-  { id: 'greenhouse',  emoji: '🫙', label: 'Greenhouse',  desc: 'Climate-controlled growing space' },
+  { id: 'greenhouse',  emoji: '🏠', label: 'Greenhouse',  desc: 'Climate-controlled growing space' },
 ];
 
 const SUN_OPTIONS = [
@@ -47,6 +47,7 @@ function makeArea(index) {
     units: [],           // [{ id, type_id, label, width_ft, length_ft, x, y, rotation }]
     sun_exposure: 'full_sun',
     syncDims: false,
+    sharedSoil: false,
     has_fencing: false,
     irrigation_type: 'hand',
   };
@@ -209,6 +210,7 @@ function GardenBuilder({ units, onLayoutChange }) {
               className={`absolute flex items-center justify-center cursor-grab active:cursor-grabbing ${isSelected ? 'z-10' : ''}`}
               style={{ left: p.x, top: p.y, width: bw, height: bh }}
               onPointerDown={e => onPointerDown(e, unit.id)}
+              title={unit.previous_plants ? `Previously grew: ${unit.previous_plants}` : ''}
             >
               <div
                 className={`rounded-lg border-2 flex flex-col items-center justify-center gap-0.5 ${isSelected ? 'ring-2 ring-offset-1 ring-blue-400' : ''}`}
@@ -312,21 +314,9 @@ export default function GardenWizard() {
       return { ...f, areas };
     });
 
-  // When syncDims is on, propagate changes to all units in the area
-  const updateUnitMaybeSynced = (areaIdx, unitId, changes) => {
-    if (form.areas[areaIdx]?.syncDims) {
-      setForm(f => {
-        const areas = [...f.areas];
-        areas[areaIdx] = {
-          ...areas[areaIdx],
-          units: areas[areaIdx].units.map(u => ({ ...u, ...changes })),
-        };
-        return { ...f, areas };
-      });
-    } else {
-      updateUnit(areaIdx, unitId, changes);
-    }
-  };
+  // Dimensions are always edited individually — the syncDims toggle is a one-time bulk-apply,
+  // not a lock. Use updateUnit for all per-unit field changes.
+  const updateUnitMaybeSynced = updateUnit;
 
   // Remove a unit from an area and keep type_selections in sync
   const removeUnit = (areaIdx, unitToRemove) => {
@@ -468,6 +458,7 @@ export default function GardenWizard() {
         sun_exposure: a.sun_exposure,
         has_fencing: a.has_fencing,
         irrigation_type: a.irrigation_type,
+        shared_soil: a.sharedSoil || false,
       })));
       if (allUnits.length > 0) {
         fd.append('layout_data', JSON.stringify({ version: 2, units: allUnits }));
@@ -492,9 +483,7 @@ export default function GardenWizard() {
     if (step === 2 && currentArea) {
       if (areaSubStep === 0) return currentArea.type_selections.length > 0 && currentArea.type_selections.every(s => s.quantity >= 1);
       if (areaSubStep === 1) {
-        // When syncing, only unit 1 needs to be filled — others mirror it
-        const unitsToCheck = currentArea.syncDims ? [currentArea.units[0]] : currentArea.units;
-        return unitsToCheck.every(u => u && Number(u.width_ft) > 0 && Number(u.length_ft) > 0);
+        return currentArea.units.every(u => u && Number(u.width_ft) > 0 && Number(u.length_ft) > 0);
       }
       return true; // builder is optional
     }
@@ -806,30 +795,49 @@ export default function GardenWizard() {
                   </p>
                 </div>
 
-                {/* Same dimensions toggle (only when multiple units) */}
-                {currentArea.units.length > 1 && (
+                {/* One-time "apply same dims to all" when multiple units and unit 1 has values */}
+                {currentArea.units.length > 1 && Number(currentArea.units[0]?.width_ft) > 0 && Number(currentArea.units[0]?.length_ft) > 0 && (
                   <button
                     type="button"
                     onClick={() => {
-                      const turningOn = !currentArea.syncDims;
-                      // When turning sync on, immediately copy unit 1's current values to all units
-                      const unitUpdates = turningOn && currentArea.units.length > 1
-                        ? { units: currentArea.units.map(u => ({ ...u, width_ft: currentArea.units[0].width_ft, length_ft: currentArea.units[0].length_ft })) }
-                        : {};
-                      updateArea(areaIndex, { syncDims: turningOn, ...unitUpdates });
+                      // Bulk-copy unit 1's dimensions to all other units once
+                      updateArea(areaIndex, {
+                        syncDims: true,
+                        units: currentArea.units.map(u => ({
+                          ...u,
+                          width_ft: currentArea.units[0].width_ft,
+                          length_ft: currentArea.units[0].length_ft,
+                        })),
+                      });
                     }}
+                    className="w-full flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-dashed border-garden-300 text-sm text-garden-700 font-medium hover:bg-garden-50 transition-all"
+                  >
+                    <span className="text-base">⟳</span>
+                    Apply {currentArea.units[0].width_ft}×{currentArea.units[0].length_ft} ft to all {currentArea.units.length} units
+                    <span className="text-xs text-garden-500 font-normal ml-auto">you can still edit each individually</span>
+                  </button>
+                )}
+
+                {/* Shared soil toggle — shown for multi-unit areas */}
+                {currentArea.units.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => updateArea(areaIndex, { sharedSoil: !currentArea.sharedSoil })}
                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-sm font-medium transition-all ${
-                      currentArea.syncDims
-                        ? 'border-garden-500 bg-garden-50 text-garden-700'
-                        : 'border-gray-200 text-gray-600 hover:border-garden-300'
+                      currentArea.sharedSoil
+                        ? 'border-blue-400 bg-blue-50 text-blue-700'
+                        : 'border-gray-200 text-gray-600 hover:border-blue-300'
                     }`}
                   >
                     <span className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all ${
-                      currentArea.syncDims ? 'bg-garden-500 border-garden-500' : 'border-gray-300'
+                      currentArea.sharedSoil ? 'bg-blue-500 border-blue-500' : 'border-gray-300'
                     }`}>
-                      {currentArea.syncDims && <span className="text-white text-xs leading-none">✓</span>}
+                      {currentArea.sharedSoil && <span className="text-white text-xs leading-none">✓</span>}
                     </span>
-                    Use the same dimensions for all {currentArea.units.length} units
+                    <div className="text-left">
+                      <div>These beds share the same soil (e.g. connected U-shaped beds)</div>
+                      <div className="font-normal text-xs opacity-70 mt-0.5">The AI will treat them as one growing zone for crop rotation</div>
+                    </div>
                   </button>
                 )}
 
@@ -840,12 +848,10 @@ export default function GardenWizard() {
                     const sqft     = unit.width_ft && unit.length_ft
                       ? (parseFloat(unit.width_ft) * parseFloat(unit.length_ft)).toFixed(1)
                       : null;
-                    // When synced, only the first card is editable; others show a mirror note
-                    const isReadonly = currentArea.syncDims && unitIdx > 0;
                     return (
                       <div
                         key={unit.id}
-                        className={`rounded-xl border-2 p-4 space-y-3 transition-opacity ${isReadonly ? 'opacity-60' : ''}`}
+                        className="rounded-xl border-2 p-4 space-y-3"
                         style={{ borderColor: c.border, backgroundColor: c.bg + 'cc' }}
                       >
                         <div className="flex items-center gap-2">
@@ -855,9 +861,6 @@ export default function GardenWizard() {
                             <span className="text-xs font-medium" style={{ color: c.text }}>
                               📐 {sqft} sq ft
                             </span>
-                          )}
-                          {isReadonly && (
-                            <span className="text-xs text-gray-400">mirrors unit 1</span>
                           )}
                           {currentArea.units.length > 1 && (
                             <button
@@ -876,9 +879,8 @@ export default function GardenWizard() {
                             <input
                               type="number" className="input"
                               value={unit.width_ft}
-                              onChange={e => updateUnitMaybeSynced(areaIndex, unit.id, { width_ft: e.target.value })}
+                              onChange={e => updateUnit(areaIndex, unit.id, { width_ft: e.target.value })}
                               placeholder="e.g. 4" min="0.5" step="0.5"
-                              readOnly={isReadonly}
                             />
                           </div>
                           <div>
@@ -886,9 +888,8 @@ export default function GardenWizard() {
                             <input
                               type="number" className="input"
                               value={unit.length_ft}
-                              onChange={e => updateUnitMaybeSynced(areaIndex, unit.id, { length_ft: e.target.value })}
+                              onChange={e => updateUnit(areaIndex, unit.id, { length_ft: e.target.value })}
                               placeholder="e.g. 8" min="0.5" step="0.5"
-                              readOnly={isReadonly}
                             />
                           </div>
                         </div>

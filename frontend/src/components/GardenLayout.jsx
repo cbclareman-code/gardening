@@ -125,22 +125,13 @@ function AreaCarousel({ units, plants, layoutData, onPlantRemove }) {
   const plantById = {};
   plants.forEach(p => { plantById[p.plant_id] = p; });
 
-  // Resolve unit → plant list
+  // Resolve unit → plant list — ONLY from AI assignments; never guess
   const plantsByUnit = {};
+  units.forEach(u => { plantsByUnit[u.id] = []; }); // default empty
   if (plant_assignments && Object.keys(plant_assignments).length > 0) {
-    // AI-assigned
     for (const [uid, ids] of Object.entries(plant_assignments)) {
       plantsByUnit[Number(uid)] = ids.map(id => plantById[id]).filter(Boolean);
     }
-    // Any units not in assignments get empty list
-    units.forEach(u => { if (!plantsByUnit[u.id]) plantsByUnit[u.id] = []; });
-  } else {
-    // Fallback: round-robin distribution
-    units.forEach(u => { plantsByUnit[u.id] = []; });
-    plants.forEach((p, i) => {
-      const u = units[i % units.length];
-      if (u) plantsByUnit[u.id].push(p);
-    });
   }
 
   // Group units by area_name, preserving insertion order
@@ -189,7 +180,8 @@ function AreaCarousel({ units, plants, layoutData, onPlantRemove }) {
       {/* Unassigned notice */}
       {!hasAssignments && plants.length > 0 && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-800">
-          Plants shown below are placeholder placings. Use <strong>Get AI Plant Plan</strong> above for an assignment optimized around spacing, companion grouping, sun requirements, and crop rotation.
+          <strong>{plants.length} plant{plants.length !== 1 ? 's' : ''} added to your garden.</strong>{' '}
+          Use <strong>Get AI Plant Plan</strong> above to assign them to specific beds based on spacing, companion grouping, sun requirements, and crop rotation. Until then, beds show as empty below.
         </div>
       )}
 
