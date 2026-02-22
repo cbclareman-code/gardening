@@ -37,7 +37,7 @@ function AreaMiniMap({ units, plantsByUnit = {} }) {
   const contentW = maxX - minX;
   const contentH = maxY - minY;
   const MAP_W = 232;
-  const scale = Math.min(MAP_W / contentW, 140 / contentH);
+  const scale = Math.min(MAP_W / contentW, 180 / contentH);
   const mapH = Math.round(contentH * scale) + 1;
 
   return (

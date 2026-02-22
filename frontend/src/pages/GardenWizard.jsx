@@ -521,7 +521,8 @@ export default function GardenWizard() {
         updateArea(areaIndex, { units: synced });
         setAreaSubStep(1);
       } else if (areaSubStep === 1) {
-        setAreaSubStep(2); // → Previous Plants
+        if (isMultiUnit) setAreaSubStep(2); // → Previous Plants (separate screen for multi-unit)
+        else setAreaSubStep(4);             // → Preferences (single-unit: history already on dims screen)
       } else if (areaSubStep === 2) {
         if (isMultiUnit) setAreaSubStep(3); // → Builder
         else setAreaSubStep(4);             // → Preferences (skip builder for 1 unit)
@@ -539,7 +540,7 @@ export default function GardenWizard() {
     if (step <= 0) return;
     if (step === 1) { setStep(0); return; }
     if (step === 2) {
-      if (areaSubStep === 4) { setAreaSubStep(isMultiUnit ? 3 : 2); return; }
+      if (areaSubStep === 4) { setAreaSubStep(isMultiUnit ? 3 : 1); return; }
       if (areaSubStep === 3) { setAreaSubStep(2); return; }
       if (areaSubStep === 2) { setAreaSubStep(1); return; }
       if (areaSubStep === 1) { setAreaSubStep(0); return; }
@@ -562,14 +563,14 @@ export default function GardenWizard() {
   };
 
   // ── progress bar ───────────────────────────────────────────────────────────
-  // Each area has 5 sub-steps (multi-unit) or 4 (single-unit, skips builder)
-  const areaSlots  = form.areas.reduce((s, a) => s + (totalUnitsInArea(a) > 1 ? 5 : 4), 0);
+  // Each area has 5 sub-steps (multi-unit) or 3 (single-unit: dims+history merged, builder skipped)
+  const areaSlots  = form.areas.reduce((s, a) => s + (totalUnitsInArea(a) > 1 ? 5 : 3), 0);
   const totalSlots = 2 + areaSlots + 1; // location + area-count + area-loop + photo
-  // When on subStep 4 in a single-unit area, count it as slot 3 (builder was skipped)
-  const currentSubSlot = isMultiUnit ? areaSubStep : (areaSubStep >= 4 ? 3 : areaSubStep);
+  // For single-unit areas subSteps are 0→1→4 (mapped to progress slots 0,1,2)
+  const currentSubSlot = isMultiUnit ? areaSubStep : (areaSubStep >= 4 ? 2 : areaSubStep);
   const doneSlots  = step === 0 ? 0
     : step === 1 ? 1
-    : step === 2 ? 2 + form.areas.slice(0, areaIndex).reduce((s, a) => s + (totalUnitsInArea(a) > 1 ? 5 : 4), 0) + currentSubSlot
+    : step === 2 ? 2 + form.areas.slice(0, areaIndex).reduce((s, a) => s + (totalUnitsInArea(a) > 1 ? 5 : 3), 0) + currentSubSlot
     : 2 + areaSlots;
 
   const progress = Math.round((doneSlots / totalSlots) * 100);
@@ -577,7 +578,7 @@ export default function GardenWizard() {
   const stepLabel = step === 0 ? 'Location'
     : step === 1 ? 'Garden Areas'
     : step === 2 && areaSubStep === 0 ? `${currentArea?.name}: Types`
-    : step === 2 && areaSubStep === 1 ? `${currentArea?.name}: Dimensions`
+    : step === 2 && areaSubStep === 1 ? `${currentArea?.name}: ${isMultiUnit ? 'Dimensions' : 'Setup'}`
     : step === 2 && areaSubStep === 2 ? `${currentArea?.name}: History`
     : step === 2 && areaSubStep === 3 ? `${currentArea?.name}: Layout`
     : step === 2 && areaSubStep === 4 ? `${currentArea?.name}: Preferences`
@@ -917,10 +918,27 @@ export default function GardenWizard() {
                   </div>
                 </div>
 
+                {/* Single-unit areas: collect history here to save a screen */}
+                {currentArea.units.length === 1 && (
+                  <div>
+                    <label className="label">What grew here before? <span className="text-gray-400 font-normal">(optional)</span></label>
+                    <p className="text-xs text-gray-500 mb-2">
+                      Helps the AI plan crop rotation — leave blank if new or unknown.
+                    </p>
+                    <input
+                      type="text"
+                      className="input text-sm"
+                      value={currentArea.units[0]?.previous_plants ?? ''}
+                      onChange={e => updateUnit(areaIndex, currentArea.units[0].id, { previous_plants: e.target.value })}
+                      placeholder="e.g. Tomatoes, Basil"
+                    />
+                  </div>
+                )}
+
               </div>
             )}
 
-            {/* Sub-step 2: Previous Plants (history per unit) ──────────── */}
+            {/* Sub-step 2: Previous Plants (history per unit, multi-unit only) ── */}
             {areaSubStep === 2 && (
               <div className="space-y-4">
                 <div>
@@ -928,8 +946,8 @@ export default function GardenWizard() {
                     {form.num_areas > 1 ? `${currentArea.name}: ` : ''}What grew here before?
                   </h2>
                   <p className="text-sm text-gray-500">
-                    Optional — helps the AI plan crop rotation and avoid repeating plant families.
-                    Skip if this is a new bed or you don't remember.
+                    Helps the AI plan crop rotation — all fields are optional.{' '}
+                    <span className="font-medium text-gray-600">Leave blank to skip.</span>
                   </p>
                 </div>
                 <div className="space-y-3">
@@ -1104,7 +1122,9 @@ export default function GardenWizard() {
               onClick={() => { if (canAdvance()) handleNext(); else setError('Please complete this step first'); }}
               className="btn-primary flex-1"
             >
-              Continue →
+              {step === 2 && areaSubStep === 2 && currentArea?.units.every(u => !u.previous_plants)
+                ? 'Skip →'
+                : 'Continue →'}
             </button>
           )}
         </div>

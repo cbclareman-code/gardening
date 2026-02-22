@@ -26,6 +26,9 @@ export default function GardenView() {
   const [chatOpen, setChatOpen]       = useState(false);
   const [actionMsg, setActionMsg]     = useState('');
   const [recommending, setRecommending] = useState(false);
+  const [editOpen, setEditOpen]       = useState(false);
+  const [editForm, setEditForm]       = useState({});
+  const [editSaving, setEditSaving]   = useState(false);
 
   // ── load ─────────────────────────────────────────────────────────────────
   const loadGarden = useCallback(async () => {
@@ -87,10 +90,43 @@ export default function GardenView() {
       await api.post(`/nli/recommend/${id}`);
       await loadGarden();
       toast('AI plan ready!');
+      setTab('timeline'); // Jump straight to the timeline so users see the plan
     } catch (err) {
       toast(err.response?.data?.error || 'Recommendation failed — try again');
     } finally {
       setRecommending(false);
+    }
+  };
+
+  const openEdit = () => {
+    setEditForm({
+      name: garden.name || '',
+      location_city: garden.location_city || '',
+      location_state: garden.location_state || '',
+      hardiness_zone: garden.hardiness_zone || '',
+      notes: garden.notes || '',
+    });
+    setEditOpen(true);
+  };
+
+  const handleEditSave = async () => {
+    if (!editForm.name?.trim()) return;
+    setEditSaving(true);
+    try {
+      const fd = new FormData();
+      fd.append('name', editForm.name.trim());
+      if (editForm.location_city)  fd.append('location_city',  editForm.location_city);
+      if (editForm.location_state) fd.append('location_state', editForm.location_state);
+      if (editForm.hardiness_zone) fd.append('hardiness_zone', editForm.hardiness_zone);
+      fd.append('notes', editForm.notes || '');
+      const { data } = await api.put(`/gardens/${id}`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      setGarden(data.garden);
+      setEditOpen(false);
+      toast('Garden settings saved');
+    } catch {
+      toast('Failed to save — try again');
+    } finally {
+      setEditSaving(false);
     }
   };
 
@@ -138,26 +174,82 @@ export default function GardenView() {
       </div>
 
       {/* Garden header */}
-      <div className="flex items-start gap-4 mb-6 bg-garden-50 border border-garden-100 rounded-2xl p-4">
-        {garden.photo_path ? (
-          <img src={garden.photo_path} alt={garden.name} className="w-16 h-16 rounded-xl object-cover flex-shrink-0" />
-        ) : (
-          <div className="w-16 h-16 rounded-xl bg-white border border-garden-200 flex items-center justify-center text-3xl flex-shrink-0">
-            {GARDEN_TYPE_ICONS[garden.garden_type] || '🌱'}
+      <div className="mb-6">
+        <div className="flex items-start gap-4 bg-garden-50 border border-garden-100 rounded-2xl p-4">
+          {garden.photo_path ? (
+            <img src={garden.photo_path} alt={garden.name} className="w-16 h-16 rounded-xl object-cover flex-shrink-0" />
+          ) : (
+            <div className="w-16 h-16 rounded-xl bg-white border border-garden-200 flex items-center justify-center text-3xl flex-shrink-0">
+              {GARDEN_TYPE_ICONS[garden.garden_type] || '🌱'}
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-semibold text-garden-600 uppercase tracking-wide mb-0.5">You're planning</p>
+            <h1 className="text-2xl font-bold text-gray-900 leading-tight">{garden.name}</h1>
+            <div className="flex flex-wrap gap-2 mt-1.5 text-sm text-gray-500">
+              <span className="capitalize">{garden.garden_type?.replace(/_/g, ' ')}</span>
+              {garden.width_ft && garden.length_ft && <span>· {garden.width_ft}×{garden.length_ft} ft</span>}
+              {garden.hardiness_zone && <span className="text-garden-700 font-medium">· Zone {garden.hardiness_zone}</span>}
+              {garden.location_city && (
+                <span>· 📍 {garden.location_city}{garden.location_state ? `, ${garden.location_state}` : ''}</span>
+              )}
+            </div>
+          </div>
+          <button
+            onClick={editOpen ? () => setEditOpen(false) : openEdit}
+            className="flex-shrink-0 text-xs text-gray-400 hover:text-gray-600 border border-gray-200 rounded-lg px-2.5 py-1.5 hover:bg-white transition-all"
+          >
+            {editOpen ? '✕ Close' : '⚙️ Edit'}
+          </button>
+        </div>
+
+        {/* Inline edit panel */}
+        {editOpen && (
+          <div className="mt-2 card p-5 space-y-4 border-2 border-garden-200">
+            <h3 className="font-semibold text-gray-800 text-sm">Edit garden settings</h3>
+            <div>
+              <label className="label text-xs">Garden name</label>
+              <input className="input" value={editForm.name}
+                onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
+                placeholder="My Garden" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="label text-xs">City</label>
+                <input className="input" value={editForm.location_city}
+                  onChange={e => setEditForm(f => ({ ...f, location_city: e.target.value }))}
+                  placeholder="Springfield" />
+              </div>
+              <div>
+                <label className="label text-xs">State</label>
+                <input className="input uppercase" maxLength={2} value={editForm.location_state}
+                  onChange={e => setEditForm(f => ({ ...f, location_state: e.target.value.toUpperCase() }))}
+                  placeholder="IL" />
+              </div>
+            </div>
+            <div>
+              <label className="label text-xs">Hardiness Zone</label>
+              <input className="input" value={editForm.hardiness_zone}
+                onChange={e => setEditForm(f => ({ ...f, hardiness_zone: e.target.value }))}
+                placeholder="e.g. 6b" />
+            </div>
+            <div>
+              <label className="label text-xs">Notes</label>
+              <textarea className="input resize-none" rows={2} value={editForm.notes}
+                onChange={e => setEditForm(f => ({ ...f, notes: e.target.value }))}
+                placeholder="Anything else about your garden..." />
+            </div>
+            <div className="flex gap-2">
+              <button onClick={handleEditSave} disabled={editSaving || !editForm.name?.trim()}
+                className="btn-primary flex-1 disabled:opacity-50 text-sm">
+                {editSaving ? 'Saving…' : 'Save changes'}
+              </button>
+              <button onClick={() => setEditOpen(false)} className="btn-secondary text-sm px-4">
+                Cancel
+              </button>
+            </div>
           </div>
         )}
-        <div className="flex-1 min-w-0">
-          <p className="text-xs font-semibold text-garden-600 uppercase tracking-wide mb-0.5">You're planning</p>
-          <h1 className="text-2xl font-bold text-gray-900 leading-tight">{garden.name}</h1>
-          <div className="flex flex-wrap gap-2 mt-1.5 text-sm text-gray-500">
-            <span className="capitalize">{garden.garden_type?.replace(/_/g, ' ')}</span>
-            {garden.width_ft && garden.length_ft && <span>· {garden.width_ft}×{garden.length_ft} ft</span>}
-            {garden.hardiness_zone && <span className="text-garden-700 font-medium">· Zone {garden.hardiness_zone}</span>}
-            {garden.location_city && (
-              <span>· 📍 {garden.location_city}{garden.location_state ? `, ${garden.location_state}` : ''}</span>
-            )}
-          </div>
-        </div>
       </div>
 
       {/* Tabs */}
@@ -185,38 +277,73 @@ export default function GardenView() {
         <div className="space-y-5">
 
           {/* AI plan CTA */}
-          <div className={`rounded-xl border p-4 flex items-start justify-between gap-4 ${
-            hasPlan ? 'bg-garden-50 border-garden-200' : 'bg-amber-50 border-amber-200'
-          }`}>
-            <div>
-              {hasPlan ? (
-                <>
-                  <p className="text-sm font-semibold text-garden-800">AI plant plan active</p>
-                  <p className="text-xs text-garden-700 mt-0.5">
-                    Plants are assigned to units based on space, companions, and sun. You can still add or remove plants manually.
-                  </p>
-                </>
-              ) : (
-                <>
-                  <p className="text-sm font-semibold text-amber-800">No plant plan yet</p>
-                  <p className="text-xs text-amber-700 mt-0.5">
-                    ChatGRD can suggest an optimized layout based on your zone, sun exposure, and companion planting.
-                  </p>
-                </>
-              )}
+          {!hasPlan && gardenPlants.length === 0 ? (
+            /* Hero state — brand new garden, no plants yet */
+            <div className="card p-8 text-center space-y-5 border-2 border-dashed border-garden-200">
+              <div className="text-5xl">🌱</div>
+              <div>
+                <h2 className="text-xl font-bold text-gray-900 mb-2">Ready to plan your beds?</h2>
+                <p className="text-gray-500 text-sm max-w-sm mx-auto">
+                  ChatGRD's AI assigns plants to each bed based on your zone, sun, spacing, companion grouping, and crop rotation — all in one click.
+                </p>
+              </div>
+              <ul className="text-left text-sm text-gray-600 space-y-1.5 inline-block">
+                <li>✅ Companion pairing (Tomato + Basil + Marigold)</li>
+                <li>✅ Space-aware — no overcrowding</li>
+                <li>✅ Succession planting for year-round harvests</li>
+                <li>✅ Crop rotation based on your history</li>
+              </ul>
+              <div className="space-y-2">
+                <button
+                  onClick={handleRecommend}
+                  disabled={recommending}
+                  className="btn-primary text-base px-10 py-3 disabled:opacity-60 w-full sm:w-auto"
+                >
+                  {recommending ? '🌱 Building your plan…' : '✨ Get AI Plant Plan'}
+                </button>
+                {recommending && <p className="text-xs text-gray-400">This usually takes 15–30 seconds…</p>}
+                <div>
+                  <button onClick={() => setTab('plants')} className="text-sm text-garden-600 hover:underline">
+                    Or browse plants to add manually →
+                  </button>
+                </div>
+              </div>
             </div>
-            <button
-              onClick={handleRecommend}
-              disabled={recommending}
-              className={`flex-shrink-0 text-sm font-semibold px-4 py-2 rounded-xl transition-all disabled:opacity-60 ${
-                hasPlan
-                  ? 'bg-garden-600 hover:bg-garden-700 text-white'
-                  : 'bg-amber-500 hover:bg-amber-600 text-white'
-              }`}
-            >
-              {recommending ? '🌱 Planning…' : hasPlan ? '↺ Refresh Plan' : '✨ Get AI Plant Plan'}
-            </button>
-          </div>
+          ) : (
+            /* Compact banner when plan exists or plants have been manually added */
+            <div className={`rounded-xl border p-4 flex items-start justify-between gap-4 ${
+              hasPlan ? 'bg-garden-50 border-garden-200' : 'bg-amber-50 border-amber-200'
+            }`}>
+              <div>
+                {hasPlan ? (
+                  <>
+                    <p className="text-sm font-semibold text-garden-800">AI plant plan active</p>
+                    <p className="text-xs text-garden-700 mt-0.5">
+                      Plants are assigned to units based on space, companions, and sun. You can still add or remove plants manually.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm font-semibold text-amber-800">No AI plan yet</p>
+                    <p className="text-xs text-amber-700 mt-0.5">
+                      Get an optimized layout based on your zone, sun, companion planting, and crop rotation.
+                    </p>
+                  </>
+                )}
+              </div>
+              <button
+                onClick={handleRecommend}
+                disabled={recommending}
+                className={`flex-shrink-0 text-sm font-semibold px-4 py-2 rounded-xl transition-all disabled:opacity-60 ${
+                  hasPlan
+                    ? 'bg-garden-600 hover:bg-garden-700 text-white'
+                    : 'bg-amber-500 hover:bg-amber-600 text-white'
+                }`}
+              >
+                {recommending ? '🌱 Planning…' : hasPlan ? '↺ Refresh Plan' : '✨ Get AI Plant Plan'}
+              </button>
+            </div>
+          )}
 
           {/* Layout card */}
           <div className="card p-5">
@@ -262,15 +389,6 @@ export default function GardenView() {
             </div>
           )}
 
-          {gardenPlants.length === 0 && !recommending && (
-            <div className="text-center py-8 text-gray-500">
-              <p className="mb-3">No plants added yet.</p>
-              <div className="flex justify-center gap-3">
-                <button onClick={() => setTab('plants')} className="btn-primary">Browse Plants</button>
-                <button onClick={handleRecommend} className="btn-secondary">✨ AI Plan</button>
-              </div>
-            </div>
-          )}
         </div>
       )}
 
