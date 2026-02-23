@@ -99,25 +99,32 @@ function syncUnits(area) {
 // ─── CommaAutocomplete ────────────────────────────────────────────────────────
 // Input that provides autocomplete for comma-separated lists (e.g. previous crops)
 function CommaAutocomplete({ value, onChange, placeholder, suggestions = COMMON_CROPS }) {
-  const [open, setOpen]       = useState(false);
-  const [filtered, setFiltered] = useState([]);
+  const [open, setOpen]             = useState(false);
+  const [filtered, setFiltered]     = useState([]);
+  const [activeIndex, setActiveIndex] = useState(-1);
   const inputRef = useRef(null);
+  const activeTokenIdx = useRef(0); // which comma-delimited segment the cursor is in
 
-  const getCurrentToken = (text) => {
-    const parts = text.split(',');
-    return parts[parts.length - 1].trimStart();
+  // Returns the token under the cursor and its index among comma-separated parts
+  const getTokenAtCursor = (text, cursorPos) => {
+    const before = text.slice(0, cursorPos);
+    const parts  = before.split(',');
+    return { idx: parts.length - 1, token: parts[parts.length - 1].trimStart() };
   };
 
   const handleChange = (e) => {
-    const val = e.target.value;
+    const val       = e.target.value;
+    const cursorPos = e.target.selectionStart;
     onChange(val);
-    const token = getCurrentToken(val);
+    const { idx, token } = getTokenAtCursor(val, cursorPos);
+    activeTokenIdx.current = idx;
     if (token.length > 0) {
       const matches = suggestions
         .filter(s => s.toLowerCase().startsWith(token.toLowerCase()))
         .slice(0, 6);
       setFiltered(matches);
       setOpen(matches.length > 0);
+      setActiveIndex(-1);
     } else {
       setOpen(false);
     }
@@ -125,10 +132,29 @@ function CommaAutocomplete({ value, onChange, placeholder, suggestions = COMMON_
 
   const selectSuggestion = (suggestion) => {
     const parts = value.split(',');
-    parts[parts.length - 1] = ' ' + suggestion;
+    const idx   = activeTokenIdx.current;
+    parts[idx]  = (idx === 0 ? '' : ' ') + suggestion;
     onChange(parts.join(','));
     setOpen(false);
+    setActiveIndex(-1);
     inputRef.current?.focus();
+  };
+
+  const handleKeyDown = (e) => {
+    if (!open) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActiveIndex(i => Math.min(i + 1, filtered.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActiveIndex(i => Math.max(i - 1, -1));
+    } else if (e.key === 'Enter' && activeIndex >= 0) {
+      e.preventDefault();
+      selectSuggestion(filtered[activeIndex]);
+    } else if (e.key === 'Escape') {
+      setOpen(false);
+      setActiveIndex(-1);
+    }
   };
 
   return (
@@ -139,17 +165,20 @@ function CommaAutocomplete({ value, onChange, placeholder, suggestions = COMMON_
         className="input text-sm"
         value={value}
         onChange={handleChange}
+        onKeyDown={handleKeyDown}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         placeholder={placeholder}
       />
       {open && (
         <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
-          {filtered.map(s => (
+          {filtered.map((s, i) => (
             <button
               key={s}
               type="button"
               onMouseDown={() => selectSuggestion(s)}
-              className="w-full text-left px-3 py-2 text-sm hover:bg-garden-50 text-gray-700"
+              className={`w-full text-left px-3 py-2 text-sm text-gray-700 ${
+                i === activeIndex ? 'bg-garden-100 font-medium' : 'hover:bg-garden-50'
+              }`}
             >
               {s}
             </button>

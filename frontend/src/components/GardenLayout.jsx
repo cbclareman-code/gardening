@@ -37,8 +37,11 @@ function AreaMiniMap({ units, plantsByUnit = {} }) {
   const contentW = maxX - minX;
   const contentH = maxY - minY;
   const MAP_W = 232;
-  const scale = Math.min(MAP_W / contentW, 180 / contentH);
-  const mapH = Math.round(contentH * scale) + 1;
+  // Use a consistent physical scale (2px per builder-px ≈ 28px/ft) so larger
+  // areas render with a taller SVG rather than everything squashing to the same box.
+  const physicalScale = 2.0;
+  const scale = Math.min(physicalScale, MAP_W / contentW);
+  const mapH = Math.min(Math.round(contentH * scale) + 1, 360);
 
   return (
     <svg

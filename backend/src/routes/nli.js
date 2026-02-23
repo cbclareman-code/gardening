@@ -387,7 +387,7 @@ Omit sow_indoors for direct-sown crops. Use realistic ${new Date().getFullYear()
     } catch (e) {
       console.error('=== RECOMMEND RAW RESPONSE ===\n', raw);
       console.error('=== EXTRACTED TEXT ===\n', jsonText);
-      return res.status(500).json({ error: 'AI returned unparseable response — please try again' });
+      return res.status(500).json({ error: 'The AI response came back in an unexpected format — this is a temporary glitch, not a problem with your garden plan. Please try again.' });
     }
 
     const { plant_assignments = {}, summary = '', planting_schedule = [], capacity_warnings = [] } = rec;
@@ -433,6 +433,9 @@ Omit sow_indoors for direct-sown crops. Use realistic ${new Date().getFullYear()
     console.error('Recommend error:', err);
     if (err.status === 401 || err.code === 'authentication_error') {
       return res.status(500).json({ error: 'Invalid Anthropic API key — set ANTHROPIC_API_KEY in backend/.env and restart the server' });
+    }
+    if (err.status === 402 || err.error?.type === 'credit_balance_too_low' || (err.message || '').toLowerCase().includes('credit')) {
+      return res.status(500).json({ error: 'Anthropic API credits exhausted — add credits at console.anthropic.com and try again' });
     }
     res.status(500).json({ error: 'Recommendation failed: ' + err.message });
   }
@@ -508,13 +511,16 @@ Evaluate this plan and respond with valid JSON only:
     try {
       feedback = JSON.parse(feedbackText);
     } catch {
-      return res.status(500).json({ error: 'AI returned unparseable response — try again' });
+      return res.status(500).json({ error: 'The AI response came back in an unexpected format — this is a temporary glitch, not a problem with your plan. Please try again.' });
     }
 
     res.json(feedback);
   } catch (err) {
     console.error('Feedback error:', err);
     if (err.status === 401) return res.status(500).json({ error: 'Invalid Anthropic API key' });
+    if (err.status === 402 || err.error?.type === 'credit_balance_too_low' || (err.message || '').toLowerCase().includes('credit')) {
+      return res.status(500).json({ error: 'Anthropic API credits exhausted — add credits at console.anthropic.com and try again' });
+    }
     res.status(500).json({ error: 'Feedback failed: ' + err.message });
   }
 });
