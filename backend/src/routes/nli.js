@@ -372,9 +372,15 @@ Omit sow_indoors for direct-sown crops. Use realistic ${new Date().getFullYear()
 
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 4096,
+      max_tokens: 8192,
       messages: [{ role: 'user', content: prompt }],
     });
+
+    // Detect truncation before attempting parse
+    if (response.stop_reason === 'max_tokens') {
+      console.error('=== RECOMMEND TRUNCATED (stop_reason: max_tokens) ===');
+      return res.status(500).json({ error: 'The AI response was too long to process — try removing a few plants or splitting your garden into fewer units, then try again.' });
+    }
 
     const raw = response.content[0].text.trim();
     // Strip markdown fences then extract the outermost JSON object
