@@ -385,7 +385,8 @@ Omit sow_indoors for direct-sown crops. Use realistic ${new Date().getFullYear()
     try {
       rec = JSON.parse(jsonText);
     } catch (e) {
-      console.error('Recommend JSON parse error:', jsonText.slice(0, 500));
+      console.error('=== RECOMMEND RAW RESPONSE ===\n', raw);
+      console.error('=== EXTRACTED TEXT ===\n', jsonText);
       return res.status(500).json({ error: 'AI returned unparseable response — please try again' });
     }
 
