@@ -253,7 +253,9 @@ router.post('/recommend/:gardenId', async (req, res) => {
 
     let layoutData = {};
     try { layoutData = JSON.parse(garden.layout_data || '{}'); } catch {}
-    const units = layoutData.units || [];
+    // Reassign globally unique unit IDs — old gardens created before this fix may have
+    // per-area IDs starting at 1, which causes collisions in the prompt and assignments.
+    const units = (layoutData.units || []).map((u, i) => ({ ...u, id: i + 1 }));
     if (units.length === 0) {
       return res.status(400).json({ error: 'No layout units found — complete the garden builder step first' });
     }
@@ -381,7 +383,14 @@ Return ONLY valid JSON:
     "1": ["Tomato", "Basil", "Marigold", "Radish"],
     "2": ["Lettuce", "Carrot", "Radish"]
   },
-  "summary": "3-5 paragraphs: what's in each unit and why, companion pairs chosen, sun/space reasoning, rotation decisions, succession strategy, and any important cautions",
+  "unit_plans": [
+    {
+      "unit_id": 1,
+      "this_year": "3 × Tomato, 2 × Basil, 4 × Marigold, Radish (early succession)",
+      "last_year": "Cucumbers, Beans (different family — rotation ✓)",
+      "rationale": "Full sun suits tomatoes; basil + marigold deter aphids and whitefly; radishes clear by May before tomatoes go in."
+    }
+  ],
   "capacity_warnings": [],
   "planting_schedule": [
     {
@@ -391,8 +400,11 @@ Return ONLY valid JSON:
       "wave": 1,
       "sow_indoors": null,
       "transplant_outdoors": "${new Date().getFullYear()}-02-20",
+      "first_sprout": "${new Date().getFullYear()}-03-03",
       "first_harvest": "${new Date().getFullYear()}-03-17",
       "last_harvest": "${new Date().getFullYear()}-04-30",
+      "clear_date": "${new Date().getFullYear()}-05-01",
+      "soil_prep_date": null,
       "notes": "Direct sow. Clear bed by May 1 to make way for tomatoes."
     },
     {
@@ -403,13 +415,16 @@ Return ONLY valid JSON:
       "succession_of": "Radish",
       "sow_indoors": "${new Date().getFullYear()}-03-15",
       "transplant_outdoors": "${new Date().getFullYear()}-05-01",
+      "first_sprout": "${new Date().getFullYear()}-05-14",
       "first_harvest": "${new Date().getFullYear()}-07-15",
       "last_harvest": "${new Date().getFullYear()}-09-30",
+      "clear_date": "${new Date().getFullYear()}-10-15",
+      "soil_prep_date": "${new Date().getFullYear()}-10-20",
       "notes": "Transplant after radishes cleared. Start indoors 6-8 weeks before last frost."
     }
   ]
 }
-Omit sow_indoors for direct-sown crops. Use realistic ${new Date().getFullYear()} dates matching zone ${zone}.`;
+Omit sow_indoors for direct-sown crops. Provide all date fields (null if not applicable). Use realistic ${new Date().getFullYear()} dates matching zone ${zone}. soil_prep_date is when to add compost/fertilizer after clearing a bed.`;
 
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
@@ -437,7 +452,7 @@ Omit sow_indoors for direct-sown crops. Use realistic ${new Date().getFullYear()
       return res.status(500).json({ error: 'The AI response came back in an unexpected format — this is a temporary glitch, not a problem with your garden plan. Please try again.' });
     }
 
-    const { plant_assignments = {}, summary = '', planting_schedule = [], capacity_warnings = [] } = rec;
+    const { plant_assignments = {}, unit_plans = [], planting_schedule = [], capacity_warnings = [] } = rec;
 
     // Resolve plant names → IDs; add new plants to garden_plants if not already there
     const existingGP = db.prepare('SELECT plant_id FROM garden_plants WHERE garden_id = ?')
@@ -461,8 +476,8 @@ Omit sow_indoors for direct-sown crops. Use realistic ${new Date().getFullYear()
       }
     }
 
-    // Save back into layout_data
-    const updatedLayout = { ...layoutData, plant_assignments: assignmentIds, summary, planting_schedule, capacity_warnings };
+    // Save back into layout_data — also persist the unit array with globally-unique IDs
+    const updatedLayout = { ...layoutData, units, plant_assignments: assignmentIds, unit_plans, planting_schedule, capacity_warnings };
     db.prepare("UPDATE gardens SET layout_data = ?, updated_at = datetime('now') WHERE id = ?")
       .run(JSON.stringify(updatedLayout), req.params.gardenId);
 
@@ -475,7 +490,7 @@ Omit sow_indoors for direct-sown crops. Use realistic ${new Date().getFullYear()
       WHERE gp.garden_id = ?
     `).all(req.params.gardenId);
 
-    res.json({ garden: updatedGarden, plants: updatedPlants, summary, planting_schedule, capacity_warnings });
+    res.json({ garden: updatedGarden, plants: updatedPlants, unit_plans, planting_schedule, capacity_warnings });
   } catch (err) {
     console.error('Recommend error:', err);
     if (err.status === 401 || err.code === 'authentication_error') {

@@ -121,7 +121,7 @@ const TYPE_LABELS = {
 
 // ── Area carousel (v2 layout_data with units) ────────────────────────────────
 function AreaCarousel({ units, plants, layoutData, onPlantRemove }) {
-  const { plant_assignments = null, summary = null, planting_schedule = [], capacity_warnings = [] } = layoutData || {};
+  const { plant_assignments = null, unit_plans = null, summary = null, planting_schedule = [], capacity_warnings = [] } = layoutData || {};
 
   // Build plant lookup by plant_id (the plants table PK)
   const plantById = {};
@@ -287,8 +287,45 @@ function AreaCarousel({ units, plants, layoutData, onPlantRemove }) {
         </div>
       </div>
 
-      {/* Strategy summary */}
-      {summary && (
+      {/* Per-unit plan table (new format) */}
+      {unit_plans && unit_plans.length > 0 && (
+        <div className="space-y-2">
+          <h4 className="font-semibold text-gray-800 text-sm flex items-center gap-1.5">
+            <span>🌱</span> This Season's Plan
+          </h4>
+          <div className="overflow-x-auto rounded-xl border border-gray-200">
+            <table className="w-full text-xs border-collapse">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-200">
+                  <th className="text-left px-3 py-2 font-semibold text-gray-500 whitespace-nowrap">Bed</th>
+                  <th className="text-left px-3 py-2 font-semibold text-gray-500">This year's plan</th>
+                  <th className="text-left px-3 py-2 font-semibold text-gray-500 whitespace-nowrap">Last year's growth</th>
+                  <th className="text-left px-3 py-2 font-semibold text-gray-500">Rationale</th>
+                </tr>
+              </thead>
+              <tbody>
+                {unit_plans.map((up, i) => {
+                  const unit = units.find(u => u.id === up.unit_id);
+                  const c = TYPE_COLORS[unit?.type_id] || TYPE_COLORS.in_ground;
+                  return (
+                    <tr key={i} className="border-b border-gray-100 last:border-0 align-top">
+                      <td className="px-3 py-2 font-semibold whitespace-nowrap" style={{ color: c.text }}>
+                        {unit?.label || `Unit ${up.unit_id}`}
+                      </td>
+                      <td className="px-3 py-2 text-gray-700 leading-relaxed">{up.this_year}</td>
+                      <td className="px-3 py-2 text-gray-500 italic leading-relaxed">{up.last_year || '—'}</td>
+                      <td className="px-3 py-2 text-gray-600 leading-relaxed">{up.rationale}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Legacy summary fallback (gardens created before unit_plans) */}
+      {!unit_plans?.length && summary && (
         <div className="bg-garden-50 border border-garden-200 rounded-xl p-4 space-y-2">
           <div className="flex items-center gap-2">
             <span className="text-lg">🌱</span>

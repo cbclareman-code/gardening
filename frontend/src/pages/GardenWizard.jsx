@@ -484,9 +484,28 @@ export default function GardenWizard() {
   useEffect(() => {
     api.get('/plants').then(res => {
       const dbNames = (res.data.plants || []).map(p => p.name);
-      // Merge DB names with COMMON_CROPS so hand-typed varieties like
-      // "Cherry tomatoes" still appear as suggestions even without a DB entry
-      const merged = [...new Set([...COMMON_CROPS, ...dbNames])].sort();
+      // DB names take priority; COMMON_CROPS fills in user-friendly variants
+      const combined = [...dbNames, ...COMMON_CROPS];
+
+      // Step 1: case-insensitive dedup — first occurrence (DB name) wins
+      const seenLower = new Map();
+      for (const name of combined) {
+        const lower = name.toLowerCase();
+        if (!seenLower.has(lower)) seenLower.set(lower, name);
+      }
+      const candidates = [...seenLower.values()];
+      const lowerSet = new Set(candidates.map(n => n.toLowerCase()));
+
+      // Step 2: drop plural forms when the singular already exists
+      // e.g. "Cucumbers" drops if "Cucumber" is present; "Radishes" drops if "Radish" is present
+      const merged = candidates.filter(name => {
+        const lower = name.toLowerCase();
+        if (lower.endsWith('ies') && lowerSet.has(lower.slice(0, -3) + 'y')) return false; // strawberries→strawberry
+        if (lower.endsWith('es') && lowerSet.has(lower.slice(0, -2))) return false;          // radishes→radish
+        if (lower.endsWith('s') && !lower.endsWith('ss') && lowerSet.has(lower.slice(0, -1))) return false; // cucumbers→cucumber
+        return true;
+      }).sort((a, b) => a.localeCompare(b));
+
       if (merged.length > 0) setCropSuggestions(merged);
     }).catch(() => {}); // silently fall back to COMMON_CROPS on error
   }, []);
@@ -661,9 +680,12 @@ export default function GardenWizard() {
         }
       }
 
-      // Save unit positions + per-area metadata so AI planner has full context
+      // Save unit positions + per-area metadata so AI planner has full context.
+      // Reassign globally unique IDs across all areas (each area's syncUnits starts at 1).
+      let globalUnitId = 1;
       const allUnits = form.areas.flatMap(a => a.units.map(u => ({
         ...u,
+        id: globalUnitId++,
         area_name: a.name,
         sun_exposure: a.sun_exposure,
         has_fencing: a.has_fencing,
