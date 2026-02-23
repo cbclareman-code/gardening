@@ -4,7 +4,7 @@
 
 @layer base {
   html {
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: 'Nunito', system-ui, -apple-system, sans-serif;
   }
   body {
     @apply bg-gray-50 text-gray-900;

@@ -3,6 +3,9 @@ export default {
   content: ['./index.html', './src/**/*.{js,jsx,ts,tsx}'],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ['Nunito', 'system-ui', '-apple-system', 'sans-serif'],
+      },
       colors: {
         garden: {
           50: '#f0fdf4',
