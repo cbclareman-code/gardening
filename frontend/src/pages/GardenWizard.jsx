@@ -96,6 +96,70 @@ function syncUnits(area) {
   return next;
 }
 
+// ─── CommaAutocomplete ────────────────────────────────────────────────────────
+// Input that provides autocomplete for comma-separated lists (e.g. previous crops)
+function CommaAutocomplete({ value, onChange, placeholder, suggestions = COMMON_CROPS }) {
+  const [open, setOpen]       = useState(false);
+  const [filtered, setFiltered] = useState([]);
+  const inputRef = useRef(null);
+
+  const getCurrentToken = (text) => {
+    const parts = text.split(',');
+    return parts[parts.length - 1].trimStart();
+  };
+
+  const handleChange = (e) => {
+    const val = e.target.value;
+    onChange(val);
+    const token = getCurrentToken(val);
+    if (token.length > 0) {
+      const matches = suggestions
+        .filter(s => s.toLowerCase().startsWith(token.toLowerCase()))
+        .slice(0, 6);
+      setFiltered(matches);
+      setOpen(matches.length > 0);
+    } else {
+      setOpen(false);
+    }
+  };
+
+  const selectSuggestion = (suggestion) => {
+    const parts = value.split(',');
+    parts[parts.length - 1] = ' ' + suggestion;
+    onChange(parts.join(','));
+    setOpen(false);
+    inputRef.current?.focus();
+  };
+
+  return (
+    <div className="relative">
+      <input
+        ref={inputRef}
+        type="text"
+        className="input text-sm"
+        value={value}
+        onChange={handleChange}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        placeholder={placeholder}
+      />
+      {open && (
+        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+          {filtered.map(s => (
+            <button
+              key={s}
+              type="button"
+              onMouseDown={() => selectSuggestion(s)}
+              className="w-full text-left px-3 py-2 text-sm hover:bg-garden-50 text-gray-700"
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── GardenBuilder ────────────────────────────────────────────────────────────
 
 const SCALE  = 14;   // px per foot
@@ -402,8 +466,7 @@ export default function GardenWizard() {
       return { ...f, areas };
     });
 
-  // Dimensions are always edited individually — the syncDims toggle is a one-time bulk-apply,
-  // not a lock. Use updateUnit for all per-unit field changes.
+  // Previous plants are always edited individually regardless of syncDims.
   const updateUnitMaybeSynced = updateUnit;
 
   // Remove a unit from an area and keep type_selections in sync
@@ -883,26 +946,34 @@ export default function GardenWizard() {
                   </p>
                 </div>
 
-                {/* One-time "apply same dims to all" when multiple units and unit 1 has values */}
-                {currentArea.units.length > 1 && Number(currentArea.units[0]?.width_ft) > 0 && Number(currentArea.units[0]?.length_ft) > 0 && (
+                {/* Persistent "all same dimensions" toggle */}
+                {currentArea.units.length > 1 && (
                   <button
                     type="button"
                     onClick={() => {
-                      // Bulk-copy unit 1's dimensions to all other units once
+                      const newSync = !currentArea.syncDims;
+                      const baseW = currentArea.units[0]?.width_ft ?? '';
+                      const baseL = currentArea.units[0]?.length_ft ?? '';
                       updateArea(areaIndex, {
-                        syncDims: true,
-                        units: currentArea.units.map(u => ({
-                          ...u,
-                          width_ft: currentArea.units[0].width_ft,
-                          length_ft: currentArea.units[0].length_ft,
-                        })),
+                        syncDims: newSync,
+                        units: newSync
+                          ? currentArea.units.map(u => ({ ...u, width_ft: baseW, length_ft: baseL }))
+                          : currentArea.units,
                       });
                     }}
-                    className="w-full flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-dashed border-garden-300 text-sm text-garden-700 font-medium hover:bg-garden-50 transition-all"
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 text-sm font-medium transition-all ${
+                      currentArea.syncDims
+                        ? 'border-garden-400 bg-garden-50 text-garden-700'
+                        : 'border-gray-200 text-gray-600 hover:border-garden-300'
+                    }`}
                   >
-                    <span className="text-base">⟳</span>
-                    Apply {currentArea.units[0].width_ft}×{currentArea.units[0].length_ft} ft to all {currentArea.units.length} units
-                    <span className="text-xs text-garden-500 font-normal ml-auto">you can still edit each individually</span>
+                    <span className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all ${
+                      currentArea.syncDims ? 'bg-garden-500 border-garden-500' : 'border-gray-300'
+                    }`}>
+                      {currentArea.syncDims && <span className="text-white text-xs leading-none">✓</span>}
+                    </span>
+                    <span>All units have the same dimensions</span>
+                    <span className="text-xs font-normal opacity-60 ml-auto">uncheck to edit individually</span>
                   </button>
                 )}
 
@@ -929,62 +1000,121 @@ export default function GardenWizard() {
                   </button>
                 )}
 
-                <div className="space-y-3">
-                  {currentArea.units.map((unit, unitIdx) => {
-                    const c        = TYPE_COLORS[unit.type_id] || TYPE_COLORS.in_ground;
-                    const typeInfo = GARDEN_TYPES.find(t => t.id === unit.type_id);
-                    const sqft     = unit.width_ft && unit.length_ft
-                      ? (parseFloat(unit.width_ft) * parseFloat(unit.length_ft)).toFixed(1)
-                      : null;
-                    return (
-                      <div
-                        key={unit.id}
-                        className="rounded-xl border-2 p-4 space-y-3"
-                        style={{ borderColor: c.border, backgroundColor: c.bg + 'cc' }}
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className="text-lg">{typeInfo?.emoji}</span>
-                          <span className="font-semibold text-sm" style={{ color: c.text }}>{unit.label}</span>
-                          {sqft && (
-                            <span className="text-xs font-medium" style={{ color: c.text }}>
-                              📐 {sqft} sq ft
-                            </span>
-                          )}
+                {/* Synced: one shared input + compact unit list; Un-synced: individual inputs */}
+                {currentArea.syncDims && currentArea.units.length > 1 ? (
+                  <div className="space-y-3">
+                    <div className="rounded-xl border-2 border-garden-300 bg-garden-50 p-4 space-y-3">
+                      <p className="text-xs font-medium text-garden-700">
+                        Shared dimensions — applies to all {currentArea.units.length} units
+                      </p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="label text-xs">Width (ft)</label>
+                          <input
+                            type="number" className="input"
+                            value={currentArea.units[0]?.width_ft ?? ''}
+                            onChange={e => updateArea(areaIndex, {
+                              units: currentArea.units.map(u => ({ ...u, width_ft: e.target.value })),
+                            })}
+                            placeholder="e.g. 4" min="0.5" step="0.5"
+                          />
+                        </div>
+                        <div>
+                          <label className="label text-xs">Length (ft)</label>
+                          <input
+                            type="number" className="input"
+                            value={currentArea.units[0]?.length_ft ?? ''}
+                            onChange={e => updateArea(areaIndex, {
+                              units: currentArea.units.map(u => ({ ...u, length_ft: e.target.value })),
+                            })}
+                            placeholder="e.g. 8" min="0.5" step="0.5"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    {currentArea.units.map(unit => {
+                      const c = TYPE_COLORS[unit.type_id] || TYPE_COLORS.in_ground;
+                      const typeInfo = GARDEN_TYPES.find(t => t.id === unit.type_id);
+                      const sqft = unit.width_ft && unit.length_ft
+                        ? (parseFloat(unit.width_ft) * parseFloat(unit.length_ft)).toFixed(1) : null;
+                      return (
+                        <div key={unit.id}
+                          className="rounded-lg border px-3 py-2 flex items-center gap-2"
+                          style={{ borderColor: c.border, backgroundColor: c.bg + '88' }}
+                        >
+                          <span className="text-base">{typeInfo?.emoji}</span>
+                          <span className="text-sm font-medium" style={{ color: c.text }}>{unit.label}</span>
+                          {sqft && <span className="text-xs" style={{ color: c.text }}>📐 {sqft} sq ft</span>}
                           {currentArea.units.length > 1 && (
                             <button
                               type="button"
                               onClick={() => removeUnit(areaIndex, unit)}
                               className="ml-auto w-6 h-6 rounded-full flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors flex-shrink-0"
                               title="Remove this unit"
-                            >
-                              ✕
-                            </button>
+                            >✕</button>
                           )}
                         </div>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <label className="label text-xs">Width (ft)</label>
-                            <input
-                              type="number" className="input"
-                              value={unit.width_ft}
-                              onChange={e => updateUnit(areaIndex, unit.id, { width_ft: e.target.value })}
-                              placeholder="e.g. 4" min="0.5" step="0.5"
-                            />
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {currentArea.units.map((unit) => {
+                      const c        = TYPE_COLORS[unit.type_id] || TYPE_COLORS.in_ground;
+                      const typeInfo = GARDEN_TYPES.find(t => t.id === unit.type_id);
+                      const sqft     = unit.width_ft && unit.length_ft
+                        ? (parseFloat(unit.width_ft) * parseFloat(unit.length_ft)).toFixed(1)
+                        : null;
+                      return (
+                        <div
+                          key={unit.id}
+                          className="rounded-xl border-2 p-4 space-y-3"
+                          style={{ borderColor: c.border, backgroundColor: c.bg + 'cc' }}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg">{typeInfo?.emoji}</span>
+                            <span className="font-semibold text-sm" style={{ color: c.text }}>{unit.label}</span>
+                            {sqft && (
+                              <span className="text-xs font-medium" style={{ color: c.text }}>
+                                📐 {sqft} sq ft
+                              </span>
+                            )}
+                            {currentArea.units.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => removeUnit(areaIndex, unit)}
+                                className="ml-auto w-6 h-6 rounded-full flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors flex-shrink-0"
+                                title="Remove this unit"
+                              >
+                                ✕
+                              </button>
+                            )}
                           </div>
-                          <div>
-                            <label className="label text-xs">Length (ft)</label>
-                            <input
-                              type="number" className="input"
-                              value={unit.length_ft}
-                              onChange={e => updateUnit(areaIndex, unit.id, { length_ft: e.target.value })}
-                              placeholder="e.g. 8" min="0.5" step="0.5"
-                            />
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="label text-xs">Width (ft)</label>
+                              <input
+                                type="number" className="input"
+                                value={unit.width_ft}
+                                onChange={e => updateUnit(areaIndex, unit.id, { width_ft: e.target.value })}
+                                placeholder="e.g. 4" min="0.5" step="0.5"
+                              />
+                            </div>
+                            <div>
+                              <label className="label text-xs">Length (ft)</label>
+                              <input
+                                type="number" className="input"
+                                value={unit.length_ft}
+                                onChange={e => updateUnit(areaIndex, unit.id, { length_ft: e.target.value })}
+                                placeholder="e.g. 8" min="0.5" step="0.5"
+                              />
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                      );
+                    })}
+                  </div>
+                )}
 
                 <div>
                   <label className="label mb-3">Sun exposure</label>
@@ -1015,17 +1145,11 @@ export default function GardenWizard() {
                       Helps the AI plan crop rotation — leave blank if new or unknown.
                       If crops rotated mid-season, list both (e.g. "Bush beans, Bok choy").
                     </p>
-                    <input
-                      type="text"
-                      className="input text-sm"
-                      list="crops-datalist-dims"
+                    <CommaAutocomplete
                       value={currentArea.units[0]?.previous_plants ?? ''}
-                      onChange={e => updateUnit(areaIndex, currentArea.units[0].id, { previous_plants: e.target.value })}
-                      placeholder="e.g. Tomatoes, Basil"
+                      onChange={val => updateUnit(areaIndex, currentArea.units[0].id, { previous_plants: val })}
+                      placeholder="e.g. Tomatoes, Basil — separate multiple crops with commas"
                     />
-                    <datalist id="crops-datalist-dims">
-                      {COMMON_CROPS.map(c => <option key={c} value={c} />)}
-                    </datalist>
                   </div>
                 )}
 
@@ -1066,21 +1190,15 @@ export default function GardenWizard() {
                             </span>
                           )}
                         </div>
-                        <input
-                          type="text"
-                          className="input text-sm"
-                          list="crops-datalist-history"
+                        <CommaAutocomplete
                           value={unit.previous_plants ?? ''}
-                          onChange={e => updateUnitMaybeSynced(areaIndex, unit.id, { previous_plants: e.target.value })}
-                          placeholder="e.g. Tomatoes, Basil (leave blank if new or unknown)"
+                          onChange={val => updateUnitMaybeSynced(areaIndex, unit.id, { previous_plants: val })}
+                          placeholder="e.g. Tomatoes, Basil — separate multiple with commas"
                         />
                       </div>
                     );
                   })}
                 </div>
-                <datalist id="crops-datalist-history">
-                  {COMMON_CROPS.map(c => <option key={c} value={c} />)}
-                </datalist>
               </div>
             )}
 

@@ -377,8 +377,10 @@ Omit sow_indoors for direct-sown crops. Use realistic ${new Date().getFullYear()
     });
 
     const raw = response.content[0].text.trim();
-    // Strip any accidental markdown fences
-    const jsonText = raw.replace(/^```json?\n?/i, '').replace(/\n?```$/i, '');
+    // Strip markdown fences then extract the outermost JSON object
+    let jsonText = raw.replace(/^```json?\n?/i, '').replace(/\n?```$/i, '').trim();
+    const jsonMatch = jsonText.match(/\{[\s\S]*\}/);
+    if (jsonMatch) jsonText = jsonMatch[0];
     let rec;
     try {
       rec = JSON.parse(jsonText);
@@ -497,11 +499,13 @@ Evaluate this plan and respond with valid JSON only:
       messages: [{ role: 'user', content: prompt }],
     });
 
-    const raw = response.content[0].text.trim()
-      .replace(/^```json?\n?/i, '').replace(/\n?```$/i, '');
+    let feedbackText = response.content[0].text.trim()
+      .replace(/^```json?\n?/i, '').replace(/\n?```$/i, '').trim();
+    const feedbackMatch = feedbackText.match(/\{[\s\S]*\}/);
+    if (feedbackMatch) feedbackText = feedbackMatch[0];
     let feedback;
     try {
-      feedback = JSON.parse(raw);
+      feedback = JSON.parse(feedbackText);
     } catch {
       return res.status(500).json({ error: 'AI returned unparseable response — try again' });
     }
@@ -511,6 +515,61 @@ Evaluate this plan and respond with valid JSON only:
     console.error('Feedback error:', err);
     if (err.status === 401) return res.status(500).json({ error: 'Invalid Anthropic API key' });
     res.status(500).json({ error: 'Feedback failed: ' + err.message });
+  }
+});
+
+// ── Save a manually built plant plan ─────────────────────────────────────────
+// plant_assignments: { "unitId": [plantId, plantId, ...], ... }
+router.post('/manual-assign/:gardenId', (req, res) => {
+  try {
+    const garden = db.prepare('SELECT * FROM gardens WHERE id = ? AND user_id = ?')
+      .get(req.params.gardenId, req.user.id);
+    if (!garden) return res.status(404).json({ error: 'Garden not found' });
+
+    const { plant_assignments = {} } = req.body;
+
+    let layoutData = {};
+    try { layoutData = JSON.parse(garden.layout_data || '{}'); } catch {}
+
+    // Convert plant_id assignments → ensure they exist in garden_plants
+    const existingGP = db.prepare('SELECT plant_id FROM garden_plants WHERE garden_id = ?')
+      .all(req.params.gardenId);
+    const existingIds = new Set(existingGP.map(r => r.plant_id));
+
+    for (const plantIds of Object.values(plant_assignments)) {
+      for (const plantId of plantIds) {
+        if (!existingIds.has(plantId)) {
+          db.prepare(
+            'INSERT INTO garden_plants (id, garden_id, plant_id, x_position, y_position, quantity) VALUES (?, ?, ?, 0, 0, 1)'
+          ).run(uuidv4(), req.params.gardenId, plantId);
+          existingIds.add(plantId);
+        }
+      }
+    }
+
+    const updatedLayout = {
+      ...layoutData,
+      plant_assignments,
+      summary: 'Custom plan — drag-and-drop arrangement saved.',
+      planting_schedule: layoutData.planting_schedule || [],
+      capacity_warnings: [],
+    };
+    db.prepare("UPDATE gardens SET layout_data = ?, updated_at = datetime('now') WHERE id = ?")
+      .run(JSON.stringify(updatedLayout), req.params.gardenId);
+
+    const updatedGarden = db.prepare('SELECT * FROM gardens WHERE id = ?').get(req.params.gardenId);
+    const updatedPlants = db.prepare(`
+      SELECT gp.*, p.name, p.emoji, p.color, p.category, p.spacing_inches,
+             p.days_to_maturity, p.sun_requirement, p.companions, p.antagonists,
+             p.description, p.planting_tips
+      FROM garden_plants gp JOIN plants p ON gp.plant_id = p.id
+      WHERE gp.garden_id = ?
+    `).all(req.params.gardenId);
+
+    res.json({ garden: updatedGarden, plants: updatedPlants });
+  } catch (err) {
+    console.error('Manual assign error:', err);
+    res.status(500).json({ error: 'Failed to save plan: ' + err.message });
   }
 });
 

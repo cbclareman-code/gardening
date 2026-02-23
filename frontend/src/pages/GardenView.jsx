@@ -37,10 +37,11 @@ export default function GardenView() {
   const [chatOpen, setChatOpen]       = useState(false);
   const [actionMsg, setActionMsg]     = useState('');
   const [recommending, setRecommending] = useState(false);
-  const [feedbackOpen, setFeedbackOpen] = useState(false);
-  const [planText, setPlanText]         = useState('');
-  const [feedbackResult, setFeedbackResult] = useState(null);
-  const [feedbackLoading, setFeedbackLoading] = useState(false);
+  const [manualPlanOpen, setManualPlanOpen] = useState(false);
+  const [manualAssignments, setManualAssignments] = useState({});
+  const [savingManual, setSavingManual]   = useState(false);
+  const [draggedPlantId, setDraggedPlantId] = useState(null);
+  const [dragOverUnitId, setDragOverUnitId] = useState(null);
   // Custom plant
   const [customPlantOpen, setCustomPlantOpen]       = useState(false);
   const [customPlantName, setCustomPlantName]       = useState('');
@@ -136,17 +137,16 @@ export default function GardenView() {
     }
   };
 
-  const handleGetFeedback = async () => {
-    if (!planText.trim()) return;
-    setFeedbackLoading(true);
-    setFeedbackResult(null);
+  const handleSaveManualPlan = async () => {
+    setSavingManual(true);
     try {
-      const { data } = await api.post(`/nli/feedback/${id}`, { user_plan: planText });
-      setFeedbackResult(data);
+      await api.post(`/nli/manual-assign/${id}`, { plant_assignments: manualAssignments });
+      await loadGarden();
+      toast('Plan saved!');
     } catch (err) {
-      toast(err.response?.data?.error || 'Feedback failed — try again');
+      toast(err.response?.data?.error || 'Failed to save plan — try again');
     } finally {
-      setFeedbackLoading(false);
+      setSavingManual(false);
     }
   };
 
@@ -510,58 +510,124 @@ export default function GardenView() {
             </div>
           )}
 
-          {/* "Plan it yourself" feedback panel */}
-          <div className="card p-5 border border-dashed border-gray-200">
-            <button
-              onClick={() => { setFeedbackOpen(o => !o); setFeedbackResult(null); }}
-              className="w-full flex items-center justify-between text-sm font-medium text-gray-600 hover:text-gray-800 transition-colors"
-            >
-              <span>✏️ Have your own plan in mind? Get AI feedback on it</span>
-              <span className="text-gray-400 text-xs">{feedbackOpen ? '▲ hide' : '▼ show'}</span>
-            </button>
+          {/* Drag-and-drop manual planner */}
+          {gardenPlants.length > 0 && units.length > 0 && (
+            <div className="card p-5 border border-dashed border-gray-200">
+              <button
+                onClick={() => setManualPlanOpen(o => !o)}
+                className="w-full flex items-center justify-between text-sm font-medium text-gray-600 hover:text-gray-800 transition-colors"
+              >
+                <span>🧩 Plan it yourself — drag plants into beds</span>
+                <span className="text-gray-400 text-xs">{manualPlanOpen ? '▲ hide' : '▼ show'}</span>
+              </button>
 
-            {feedbackOpen && (
-              <div className="mt-4 space-y-3">
-                <p className="text-xs text-gray-500">
-                  Describe what you're thinking in plain language — which plants go where, what your priorities are, etc. The AI will tell you what works well and what to reconsider.
-                </p>
-                <textarea
-                  className="input resize-none text-sm"
-                  rows={4}
-                  value={planText}
-                  onChange={e => setPlanText(e.target.value)}
-                  placeholder={`e.g. "I want to put tomatoes and basil in Bed 1, carrots and beets in Bed 2, and pole beans in Beds 3 and 4. Bed 5 had bush beans last year so I'm thinking lettuce there this spring and then peppers in summer."`}
-                />
-                <button
-                  onClick={handleGetFeedback}
-                  disabled={feedbackLoading || !planText.trim()}
-                  className="btn-primary text-sm px-6 py-2 disabled:opacity-50"
-                >
-                  {feedbackLoading ? '🌱 Analyzing…' : '✨ Get AI Feedback'}
-                </button>
+              {manualPlanOpen && (
+                <div className="mt-4 space-y-4">
+                  <p className="text-xs text-gray-500">
+                    Drag any plant chip below into a bed. Save when you're done — the AI will still be available to refine or give feedback afterward.
+                  </p>
 
-                {feedbackResult && (
-                  <div className="space-y-3 mt-2">
-                    <div className="bg-green-50 border border-green-200 rounded-xl p-4">
-                      <h4 className="font-semibold text-green-800 text-sm mb-2">✅ What works well</h4>
-                      <div className="text-sm text-green-800 whitespace-pre-line leading-relaxed">
-                        {feedbackResult.works_well}
-                      </div>
+                  {/* Draggable plant chips */}
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Your plants</p>
+                    <div className="flex flex-wrap gap-2">
+                      {gardenPlants.map(gp => (
+                        <div
+                          key={gp.plant_id}
+                          draggable
+                          onDragStart={() => setDraggedPlantId(gp.plant_id)}
+                          onDragEnd={() => setDraggedPlantId(null)}
+                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium cursor-grab active:cursor-grabbing select-none border transition-all ${
+                            draggedPlantId === gp.plant_id
+                              ? 'border-garden-400 bg-garden-100 text-garden-800 shadow-md scale-105'
+                              : 'border-gray-200 bg-white text-gray-700 hover:border-garden-300 hover:bg-garden-50'
+                          }`}
+                        >
+                          <span>{gp.emoji}</span>
+                          <span>{gp.name}</span>
+                        </div>
+                      ))}
                     </div>
-                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-                      <h4 className="font-semibold text-amber-800 text-sm mb-2">💡 What I would change</h4>
-                      <div className="text-sm text-amber-800 whitespace-pre-line leading-relaxed">
-                        {feedbackResult.suggestions}
-                      </div>
-                    </div>
-                    {feedbackResult.overall && (
-                      <p className="text-sm text-gray-600 italic px-1">{feedbackResult.overall}</p>
-                    )}
                   </div>
-                )}
-              </div>
-            )}
-          </div>
+
+                  {/* Drop zones */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {units.map(unit => {
+                      const assignedIds    = manualAssignments[unit.id] || [];
+                      const assignedPlants = assignedIds
+                        .map(pid => gardenPlants.find(gp => gp.plant_id === pid))
+                        .filter(Boolean);
+                      const isOver = dragOverUnitId === unit.id;
+                      return (
+                        <div
+                          key={unit.id}
+                          onDragOver={e => { e.preventDefault(); setDragOverUnitId(unit.id); }}
+                          onDragLeave={() => setDragOverUnitId(null)}
+                          onDrop={e => {
+                            e.preventDefault();
+                            setDragOverUnitId(null);
+                            if (!draggedPlantId) return;
+                            setManualAssignments(prev => {
+                              const existing = prev[unit.id] || [];
+                              if (existing.includes(draggedPlantId)) return prev;
+                              return { ...prev, [unit.id]: [...existing, draggedPlantId] };
+                            });
+                            setDraggedPlantId(null);
+                          }}
+                          className={`rounded-xl border-2 p-3 min-h-[80px] transition-all ${
+                            isOver
+                              ? 'border-garden-400 bg-garden-50 shadow-inner'
+                              : 'border-dashed border-gray-300 hover:border-garden-300'
+                          }`}
+                        >
+                          <p className="text-xs font-semibold text-gray-600 mb-2">{unit.label}</p>
+                          {assignedPlants.length === 0 ? (
+                            <p className="text-xs text-gray-400 italic">
+                              {isOver ? '↓ Drop here' : 'Drag a plant here'}
+                            </p>
+                          ) : (
+                            <div className="flex flex-wrap gap-1.5">
+                              {assignedPlants.map(gp => (
+                                <span
+                                  key={gp.plant_id}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-garden-100 text-garden-800 border border-garden-200"
+                                >
+                                  {gp.emoji} {gp.name}
+                                  <button
+                                    onClick={() => setManualAssignments(prev => ({
+                                      ...prev,
+                                      [unit.id]: (prev[unit.id] || []).filter(pid => pid !== gp.plant_id),
+                                    }))}
+                                    className="ml-0.5 text-garden-500 hover:text-red-500 transition-colors leading-none"
+                                  >×</button>
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="flex items-center gap-3 pt-1">
+                    <button
+                      onClick={handleSaveManualPlan}
+                      disabled={savingManual || Object.values(manualAssignments).every(a => a.length === 0)}
+                      className="btn-primary text-sm px-6 py-2 disabled:opacity-50"
+                    >
+                      {savingManual ? '💾 Saving…' : '💾 Save my plan'}
+                    </button>
+                    <button
+                      onClick={() => setManualAssignments({})}
+                      className="text-sm text-gray-400 hover:text-gray-600 transition-colors"
+                    >
+                      Clear all
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
         </div>
       )}
