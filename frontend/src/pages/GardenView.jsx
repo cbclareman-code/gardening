@@ -435,7 +435,7 @@ export default function GardenView() {
                     <div className="inline-flex items-center gap-1 text-xs font-bold text-amber-700 bg-amber-200 rounded-full px-2 py-0.5">⭐ Best for most gardeners</div>
                     <div className="text-2xl">📌</div>
                     <div className="font-semibold text-gray-900 text-sm">Must Haves + AI</div>
-                    <p className="text-xs text-gray-500 leading-relaxed">You pick your anchor plants, AI fills the rest around them</p>
+                    <p className="text-xs text-gray-500 leading-relaxed">Pick up to 10 anchors — AI builds a full garden around them, adding compatible plants to fill your space</p>
                   </button>
                   {/* Option 3: Manual */}
                   <button
@@ -459,7 +459,7 @@ export default function GardenView() {
                     >
                       ← Back
                     </button>
-                    <h3 className="font-semibold text-gray-900 text-sm">Select your must-have plants</h3>
+                    <h3 className="font-semibold text-gray-900 text-sm">Select your must-have plants <span className="text-gray-400 font-normal">(up to {MAX_MUST_HAVES})</span></h3>
                     {mustHavePlantIds.length > 0 && (
                       <span className="ml-auto text-xs text-amber-700 font-medium bg-amber-100 px-2 py-0.5 rounded-full">
                         {mustHavePlantIds.length} selected
@@ -527,7 +527,7 @@ export default function GardenView() {
 
                   {mustHaveCapWarning && (
                     <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                      Maximum {MAX_MUST_HAVES} plants — remove one to add another.
+                      Up to {MAX_MUST_HAVES} anchors — the AI will add more compatible plants on top of these to fill your beds. Remove one to swap in a different anchor.
                     </p>
                   )}
 
@@ -611,7 +611,7 @@ export default function GardenView() {
                 >
                   ← Cancel
                 </button>
-                <h3 className="font-semibold text-gray-900 text-sm">📌 Select your must-have plants</h3>
+                <h3 className="font-semibold text-gray-900 text-sm">📌 Select your must-have plants <span className="text-gray-400 font-normal">(up to {MAX_MUST_HAVES})</span></h3>
                 {mustHavePlantIds.length > 0 && (
                   <span className="ml-auto text-xs text-amber-700 font-medium bg-amber-100 px-2 py-0.5 rounded-full">
                     {mustHavePlantIds.length} selected
