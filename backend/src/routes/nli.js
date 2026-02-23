@@ -262,6 +262,28 @@ router.post('/recommend/:gardenId', async (req, res) => {
     const zone = String(garden.hardiness_zone || '6');
     const frost = FROST_DATES[zone] || FROST_DATES['6'];
 
+    // Must Haves + AI mode: user pre-selected anchor plants
+    const requiredPlantIds = req.body.required_plant_ids || [];
+    const requiredPlants = requiredPlantIds.length > 0
+      ? allPlants.filter(p => requiredPlantIds.includes(p.id))
+      : [];
+
+    // Filter the catalog to required plants + their companions (reduces prompt size ~40%)
+    let plantsForPrompt = allPlants;
+    if (requiredPlants.length > 0) {
+      const companionNames = new Set();
+      requiredPlants.forEach(p => {
+        if (p.companions) {
+          p.companions.split(',').map(s => s.trim().toLowerCase()).forEach(n => companionNames.add(n));
+        }
+      });
+      const filtered = allPlants.filter(p =>
+        requiredPlantIds.includes(p.id) || companionNames.has(p.name.toLowerCase())
+      );
+      // Only use filtered list if it gives enough variety; fall back to full catalog if sparse
+      plantsForPrompt = filtered.length >= requiredPlants.length + 4 ? filtered : allPlants;
+    }
+
     // Collect any variety notes the user added to pre-selected plants
     const varietyNotes = db.prepare(`
       SELECT p.name, gp.notes as variety_note
@@ -290,8 +312,8 @@ router.post('/recommend/:gardenId', async (req, res) => {
       return `Unit ${u.id} "${u.label}" [${u.type_id}] ${wft}ft × ${lft}ft = ${sqft} sqft | sun: ${sun}${fenced}${shared} | ${prev}`;
     }).join('\n');
 
-    // Plant catalog with capacity hints per spacing
-    const plantCatalog = allPlants.map(p => {
+    // Plant catalog with capacity hints per spacing (filtered when must-haves provided)
+    const plantCatalog = plantsForPrompt.map(p => {
       const sp = p.spacing_inches || 12;
       const spFt = sp / 12;
       const invasive = (p.name === 'Mint' || (p.antagonists || '').includes('spreads')) ? ' ⚠️INVASIVE' : '';
@@ -309,11 +331,15 @@ router.post('/recommend/:gardenId', async (req, res) => {
       ? `\nESTABLISHED PERENNIALS: The following perennial plants were grown last year and WILL RETURN this season (do not skip them): ${perennialHistory.join(', ')}. Assign them back to their same units unless the gardener's notes indicate removal.`
       : '';
 
+    const requiredNote = requiredPlants.length > 0
+      ? `\nREQUIRED PLANTS — you MUST include ALL of these in the final plan: ${requiredPlants.map(p => p.name).join(', ')}. Assign these to the best-matched units first. Fill remaining capacity with compatible companions from the catalog.`
+      : '';
+
     const prompt = `You are an expert organic garden planner. Create a precise, space-aware planting plan.
 
 GARDEN: ${garden.name}
 Zone: ${zone} | Last spring frost: ${frost.last} | First fall frost: ${frost.first}
-Irrigation: ${garden.irrigation_type} | Notes: ${garden.notes || 'none'}${varietyContext}${perennialNote}
+Irrigation: ${garden.irrigation_type} | Notes: ${garden.notes || 'none'}${varietyContext}${perennialNote}${requiredNote}
 
 GARDEN UNITS:
 ${unitSummary}${sharedSoilNote}
