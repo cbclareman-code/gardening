@@ -36,7 +36,7 @@ CURRENT GARDEN STATE:
 - Dimensions: ${garden.width_ft || '?'} ft wide × ${garden.length_ft || '?'} ft long
 - Sun Exposure: ${garden.sun_exposure}
 - Irrigation: ${garden.irrigation_type}
-- Has Fencing: ${garden.has_fencing ? 'Yes' : 'No'}
+- Wildlife protection: ${garden.has_fencing === true ? 'Fenced/gated (full protection)' : garden.has_fencing === 'sheltered' ? 'Naturally sheltered (porch/deck — keeps out deer and large animals, small pests like squirrels may still access)' : 'Open/exposed (no protection)'}
 
 CURRENT PLANTS (${plants.length} varieties):
 ${plantList || '(No plants added yet)'}
@@ -285,7 +285,7 @@ router.post('/recommend/:gardenId', async (req, res) => {
       const sqft = (wft * lft).toFixed(1);
       const sun = u.sun_exposure || garden.sun_exposure || 'full_sun';
       const prev = u.previous_plants ? `previously grew: ${u.previous_plants}` : 'no prior planting history';
-      const fenced = u.has_fencing ? ', fenced' : '';
+      const fenced = u.has_fencing === true ? ', fenced' : u.has_fencing === 'sheltered' ? ', naturally sheltered (deer-safe, small pests possible)' : '';
       const shared = u.shared_soil ? ' [SHARED SOIL]' : '';
       return `Unit ${u.id} "${u.label}" [${u.type_id}] ${wft}ft × ${lft}ft = ${sqft} sqft | sun: ${sun}${fenced}${shared} | ${prev}`;
     }).join('\n');

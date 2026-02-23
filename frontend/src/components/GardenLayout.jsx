@@ -19,7 +19,7 @@ function unitBuilderSize(u) {
   };
 }
 
-function AreaMiniMap({ units, plantsByUnit = {} }) {
+function AreaMiniMap({ units, plantsByUnit = {}, maxHeight = 360 }) {
   if (!units.length) return null;
   const rects = units.map(u => {
     const { w, h } = unitBuilderSize(u);
@@ -37,11 +37,10 @@ function AreaMiniMap({ units, plantsByUnit = {} }) {
   const contentW = maxX - minX;
   const contentH = maxY - minY;
   const MAP_W = 232;
-  // Use a consistent physical scale (2px per builder-px ≈ 28px/ft) so larger
-  // areas render with a taller SVG rather than everything squashing to the same box.
+  // Scale to fit both width and the given maxHeight so the map never overflows its container
   const physicalScale = 2.0;
-  const scale = Math.min(physicalScale, MAP_W / contentW);
-  const mapH = Math.min(Math.round(contentH * scale) + 1, 360);
+  const scale = Math.min(physicalScale, MAP_W / contentW, maxHeight / contentH);
+  const mapH = Math.round(contentH * scale) + 1;
 
   return (
     <svg
@@ -201,8 +200,10 @@ function AreaCarousel({ units, plants, layoutData, onPlantRemove }) {
                     {areaName}
                   </div>
                 )}
-                {/* Spatial mini-map of this area's unit layout */}
-                <AreaMiniMap units={areaUnits} plantsByUnit={plantsByUnit} />
+                {/* Spatial mini-map — fixed-height container so unit cards align across columns */}
+                <div className="rounded-lg overflow-hidden" style={{ height: 140 }}>
+                  <AreaMiniMap units={areaUnits} plantsByUnit={plantsByUnit} maxHeight={140} />
+                </div>
 
                 {areaUnits.map(u => {
                   const c = TYPE_COLORS[u.type_id] || TYPE_COLORS.in_ground;

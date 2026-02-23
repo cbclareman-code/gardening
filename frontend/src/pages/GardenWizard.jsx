@@ -104,6 +104,7 @@ function CommaAutocomplete({ value, onChange, placeholder, suggestions = COMMON_
   const [activeIndex, setActiveIndex] = useState(-1);
   const inputRef = useRef(null);
   const activeTokenIdx = useRef(0); // which comma-delimited segment the cursor is in
+  const justSelected = useRef(false); // skip blur-cleanup right after a dropdown pick
 
   // Returns the token under the cursor and its index among comma-separated parts
   const getTokenAtCursor = (text, cursorPos) => {
@@ -134,10 +135,18 @@ function CommaAutocomplete({ value, onChange, placeholder, suggestions = COMMON_
     const parts = value.split(',');
     const idx   = activeTokenIdx.current;
     parts[idx]  = (idx === 0 ? '' : ' ') + suggestion;
-    onChange(parts.join(','));
+    const newVal = parts.join(',') + ', ';
+    onChange(newVal);
+    justSelected.current = true;
     setOpen(false);
     setActiveIndex(-1);
     inputRef.current?.focus();
+    // place cursor at end of new value
+    setTimeout(() => {
+      if (inputRef.current) {
+        inputRef.current.selectionStart = inputRef.current.selectionEnd = newVal.length;
+      }
+    }, 0);
   };
 
   const handleKeyDown = (e) => {
@@ -166,7 +175,14 @@ function CommaAutocomplete({ value, onChange, placeholder, suggestions = COMMON_
         value={value}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
-        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        onBlur={() => setTimeout(() => {
+          setOpen(false);
+          if (justSelected.current) { justSelected.current = false; return; }
+          // If user clicked away without typing another item, strip the trailing ", "
+          const currentVal = inputRef.current?.value ?? '';
+          const trimmed = currentVal.replace(/,\s*$/, '');
+          if (trimmed !== currentVal) onChange(trimmed);
+        }, 150)}
         placeholder={placeholder}
       />
       {open && (
@@ -1298,21 +1314,36 @@ export default function GardenWizard() {
                 </div>
 
                 <div>
-                  <label className="label">🦌 Wildlife / fencing protection</label>
-                  <p className="text-xs text-gray-500 mb-2">Does this area have deer, rabbit, or pest fencing?</p>
-                  <div className="grid grid-cols-2 gap-2">
+                  <label className="label">🦌 Wildlife access</label>
+                  <p className="text-xs text-gray-500 mb-2">Can deer, rabbits, or large pests reach this area?</p>
+                  <div className="grid grid-cols-3 gap-2">
                     <button
                       onClick={() => updateArea(areaIndex, { has_fencing: true })}
-                      className={`p-3 rounded-xl border-2 flex items-center justify-center transition-all ${
+                      className={`p-3 rounded-xl border-2 flex flex-col items-center gap-1 transition-all ${
                         currentArea.has_fencing === true ? 'border-garden-500 bg-garden-50' : 'border-gray-200 hover:border-garden-300'
                       }`}
-                    ><span className="text-sm font-medium">Yes, it's protected</span></button>
+                    >
+                      <span className="text-xl">🚧</span>
+                      <span className="text-xs font-medium text-center">Fenced / gated</span>
+                    </button>
+                    <button
+                      onClick={() => updateArea(areaIndex, { has_fencing: 'sheltered' })}
+                      className={`p-3 rounded-xl border-2 flex flex-col items-center gap-1 transition-all ${
+                        currentArea.has_fencing === 'sheltered' ? 'border-garden-500 bg-garden-50' : 'border-gray-200 hover:border-garden-300'
+                      }`}
+                    >
+                      <span className="text-xl">🏡</span>
+                      <span className="text-xs font-medium text-center">Naturally sheltered (porch, deck)</span>
+                    </button>
                     <button
                       onClick={() => updateArea(areaIndex, { has_fencing: false })}
-                      className={`p-3 rounded-xl border-2 flex items-center justify-center transition-all ${
+                      className={`p-3 rounded-xl border-2 flex flex-col items-center gap-1 transition-all ${
                         currentArea.has_fencing === false ? 'border-garden-500 bg-garden-50' : 'border-gray-200 hover:border-garden-300'
                       }`}
-                    ><span className="text-sm font-medium">No fencing</span></button>
+                    >
+                      <span className="text-xl">🌿</span>
+                      <span className="text-xs font-medium text-center">Open / exposed</span>
+                    </button>
                   </div>
                 </div>
               </div>
