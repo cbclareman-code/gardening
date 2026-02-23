@@ -209,34 +209,37 @@ export default function PlantingTimeline({ schedule, units, plants }) {
                           </div>
                         </td>
 
-                        {/* Month cells */}
-                        {MONTHS.map((_, mi) => {
+                        {/* Month cells — pure color bars, no text (use legend + tooltip) */}
+                        {MONTHS.map((m, mi) => {
                           const evt = getMonthEvent(mi, item);
                           const cfg = evt ? EVENTS[evt] : null;
                           const isToday = mi === todayMonth;
+                          const prevEvt = mi > 0 ? getMonthEvent(mi - 1, item) : null;
+                          const nextEvt = mi < 11 ? getMonthEvent(mi + 1, item) : null;
+                          const isFirst = evt && evt !== prevEvt;
+                          const isLast  = evt && evt !== nextEvt;
                           return (
                             <td
                               key={mi}
-                              className={`border-r border-gray-100 text-center align-middle p-0 ${
+                              className={`relative border-r border-gray-100 p-0 h-8 ${
                                 isToday && !evt ? 'bg-red-50/40' : ''
                               }`}
-                              style={{
-                                backgroundColor: cfg ? cfg.bg : undefined,
-                              }}
-                              title={cfg ? cfg.label : undefined}
+                              style={{ backgroundColor: cfg ? cfg.bg : undefined }}
+                              title={cfg ? `${item.plant_name} — ${cfg.label} (${m})` : `${item.plant_name} (${m})`}
                             >
-                              {cfg && (
-                                <span
-                                  className="block text-center leading-tight px-0.5 py-1.5 text-xs font-medium whitespace-nowrap overflow-hidden"
-                                  style={{ color: cfg.text, fontSize: '10px' }}
-                                >
-                                  {cfg.label}
-                                </span>
+                              {/* Round the leading and trailing edge of each activity segment */}
+                              {cfg && isFirst && (
+                                <div className="absolute left-0 inset-y-1 w-1.5 rounded-l-full"
+                                  style={{ backgroundColor: cfg.bg, filter: 'brightness(0.85)' }} />
                               )}
-                              {/* Today marker when no event */}
-                              {!cfg && isToday && (
-                                <div className="w-full h-full flex items-center justify-center">
-                                  <div className="w-px h-4 bg-red-400 opacity-60 mx-auto" />
+                              {cfg && isLast && (
+                                <div className="absolute right-0 inset-y-1 w-1.5 rounded-r-full"
+                                  style={{ backgroundColor: cfg.bg, filter: 'brightness(0.85)' }} />
+                              )}
+                              {/* Today marker line */}
+                              {isToday && (
+                                <div className="absolute inset-0 flex items-stretch pointer-events-none z-10">
+                                  <div className="w-0.5 bg-red-400 opacity-80 mx-auto" />
                                 </div>
                               )}
                             </td>

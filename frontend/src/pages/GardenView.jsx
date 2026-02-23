@@ -486,28 +486,44 @@ export default function GardenView() {
                   </p>
                 </div>
               </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={() => { setPendingReviewAreaName(null); setTab('timeline'); }}
-                  className="btn-primary text-sm px-5 py-2"
-                >
-                  Looks good — show me the timeline →
-                </button>
-                <button
-                  onClick={() => { setPlanningAreaName(pendingReviewAreaName); setPendingReviewAreaName(null); }}
-                  className="btn-secondary text-sm px-4 py-2"
-                >
-                  ↺ Re-plan this area
-                </button>
-                {areaNames.filter(n => !areaHasPlan(n) && n !== pendingReviewAreaName).length > 0 && (
-                  <button
-                    onClick={() => setPendingReviewAreaName(null)}
-                    className="text-sm text-garden-600 hover:text-garden-800 transition-colors px-2"
-                  >
-                    Plan next area →
-                  </button>
-                )}
-              </div>
+              {(() => {
+                const unplanned = areaNames.filter(n => !areaHasPlan(n) && n !== pendingReviewAreaName);
+                return (
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap gap-2">
+                      {unplanned.length > 0 ? (
+                        <>
+                          <button
+                            onClick={() => { setPendingReviewAreaName(null); setPlanningAreaName(unplanned[0]); }}
+                            className="btn-primary flex-1 min-w-fit text-sm py-2.5"
+                          >
+                            Plan <span className="font-bold">{unplanned[0]}</span> next →
+                          </button>
+                          <button
+                            onClick={() => { setPendingReviewAreaName(null); setTab('timeline'); }}
+                            className="btn-secondary text-sm px-4 py-2.5"
+                          >
+                            📅 View timeline so far
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          onClick={() => { setPendingReviewAreaName(null); setTab('timeline'); }}
+                          className="btn-primary flex-1 text-sm py-2.5"
+                        >
+                          ✓ All areas planned — view full timeline →
+                        </button>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => { setPlanningAreaName(pendingReviewAreaName); setPendingReviewAreaName(null); }}
+                      className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                    >
+                      ↺ Not happy with this area? Re-plan it
+                    </button>
+                  </div>
+                );
+              })()}
             </div>
           )}
 

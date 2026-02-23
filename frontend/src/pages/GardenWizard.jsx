@@ -517,6 +517,7 @@ export default function GardenWizard() {
 
   const [form, setForm] = useState({
     name: '',
+    zip_code: '',
     location_city: '',
     location_state: '',
     hardiness_zone: '',
@@ -637,6 +638,23 @@ export default function GardenWizard() {
     if (form.location_state) {
       update('hardiness_zone', String(getZoneFromCity(form.location_city, form.location_state)));
     }
+  };
+
+  // Zip code → auto-populate city, state, and hardiness zone via zippopotam.us (free, no key)
+  const handleZipBlur = async () => {
+    const zip = form.zip_code.replace(/\D/g, '');
+    if (zip.length !== 5) return;
+    try {
+      const resp = await fetch(`https://api.zippopotam.us/us/${zip}`);
+      if (!resp.ok) return; // invalid zip — silently ignore
+      const data = await resp.json();
+      const city  = data.places?.[0]?.['place name'] || '';
+      const state = data.places?.[0]?.['state abbreviation'] || '';
+      if (city || state) {
+        const zone = getZoneFromCity(city, state);
+        setForm(f => ({ ...f, location_city: city, location_state: state, hardiness_zone: String(zone) }));
+      }
+    } catch { /* network error — silently ignore */ }
   };
 
   // ── photo ──────────────────────────────────────────────────────────────────
@@ -842,18 +860,40 @@ export default function GardenWizard() {
                 autoFocus
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-3">
               <div>
-                <label className="label">City</label>
-                <input className="input" value={form.location_city}
-                  onChange={e => update('location_city', e.target.value)}
-                  onBlur={handleZoneBlur} placeholder="Springfield" />
+                <label className="label">ZIP Code</label>
+                <input
+                  className="input"
+                  value={form.zip_code}
+                  onChange={e => update('zip_code', e.target.value.replace(/\D/g, '').slice(0, 5))}
+                  onBlur={handleZipBlur}
+                  placeholder="e.g. 60614"
+                  maxLength={5}
+                  inputMode="numeric"
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  Auto-fills city, state &amp; hardiness zone
+                </p>
               </div>
-              <div>
-                <label className="label">State (2-letter)</label>
-                <input className="input uppercase" value={form.location_state}
-                  onChange={e => update('location_state', e.target.value.toUpperCase())}
-                  onBlur={handleZoneBlur} placeholder="IL" maxLength={2} />
+              <div className="flex items-center gap-3">
+                <div className="h-px flex-1 bg-gray-200" />
+                <span className="text-xs text-gray-400 font-medium">or enter manually</span>
+                <div className="h-px flex-1 bg-gray-200" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label">City</label>
+                  <input className="input" value={form.location_city}
+                    onChange={e => update('location_city', e.target.value)}
+                    onBlur={handleZoneBlur} placeholder="Springfield" />
+                </div>
+                <div>
+                  <label className="label">State (2-letter)</label>
+                  <input className="input uppercase" value={form.location_state}
+                    onChange={e => update('location_state', e.target.value.toUpperCase())}
+                    onBlur={handleZoneBlur} placeholder="IL" maxLength={2} />
+                </div>
               </div>
             </div>
             <div>

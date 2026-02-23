@@ -75,15 +75,23 @@ function AreaMiniMap({ units, plantsByUnit = {}, maxHeight = 360 }) {
             <rect x={-sw / 2} y={-sh / 2} width={sw} height={sh} rx={2}
               fill={r.c.bg} stroke={r.c.border} strokeWidth={1.5} />
 
-            {/* Bed number in top-left corner */}
-            {sw > 16 && (
-              <text x={-sw / 2 + 2} y={-sh / 2 + 1.5}
-                textAnchor="start" dominantBaseline="hanging"
-                fontSize={Math.min(6, sw / 6)} fill={r.c.text} fontWeight="bold"
-                style={{ pointerEvents: 'none' }}>
-                {r.id}
-              </text>
-            )}
+            {/* Bed number badge — circle with number, top-left corner */}
+            {sw > 12 && sh > 10 && (() => {
+              const br = Math.min(7, sw / 4, sh / 4);
+              const bcx = -sw / 2 + br + 2;
+              const bcy = -sh / 2 + br + 2;
+              return (
+                <g>
+                  <circle cx={bcx} cy={bcy} r={br} fill={r.c.border} opacity={0.9} />
+                  <text x={bcx} y={bcy}
+                    textAnchor="middle" dominantBaseline="central"
+                    fontSize={br * 1.15} fill="white" fontWeight="bold"
+                    style={{ pointerEvents: 'none' }}>
+                    {r.id}
+                  </text>
+                </g>
+              );
+            })()}
 
             {/* Plant emojis centered in the bed */}
             {hasEmojis && emojis.map((emoji, i) => {
@@ -160,16 +168,23 @@ function AreaCarousel({ units, plants, layoutData, onPlantRemove }) {
 
   return (
     <div className="space-y-5">
-      {/* Capacity warnings */}
+      {/* Planning notes — collapsed by default so they don't look like errors */}
       {capacity_warnings.length > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 space-y-1">
-          <div className="text-xs font-semibold text-amber-800 flex items-center gap-1.5">
-            ⚠️ Capacity notes from AI
+        <details className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5">
+          <summary className="text-xs font-semibold text-gray-500 cursor-pointer list-none flex items-center gap-1.5 select-none">
+            <span>📋</span>
+            <span>Planning notes ({capacity_warnings.length})</span>
+            <span className="ml-auto text-gray-400">▸</span>
+          </summary>
+          <p className="text-xs text-gray-400 mt-1 mb-2">
+            Notes on how the AI adjusted plant counts or made trade-offs to fit your beds. These are informational — your plan is fully saved above.
+          </p>
+          <div className="space-y-1">
+            {capacity_warnings.map((w, i) => (
+              <p key={i} className="text-xs text-gray-600 leading-relaxed">{w}</p>
+            ))}
           </div>
-          {capacity_warnings.map((w, i) => (
-            <p key={i} className="text-xs text-amber-700">{w}</p>
-          ))}
-        </div>
+        </details>
       )}
 
       {/* No plants yet — show prompt but still render the spatial map */}
