@@ -63,6 +63,9 @@ export default function GardenView() {
   const [mustHavePlantIds, setMustHavePlantIds] = useState([]);
   const [mustHaveSearch, setMustHaveSearch] = useState('');
   const [mustHaveCapWarning, setMustHaveCapWarning] = useState(false);
+  // Per-area planning flow
+  const [planningAreaName, setPlanningAreaName] = useState(null);    // area currently being set up
+  const [pendingReviewAreaName, setPendingReviewAreaName] = useState(null); // plan returned, awaiting accept
 
   // Cycle through status messages while the AI plan is loading
   useEffect(() => {
@@ -104,10 +107,46 @@ export default function GardenView() {
   const planningSchedule = layoutData?.planting_schedule || [];
   const hasPlan         = !!(layoutData?.plant_assignments && Object.keys(layoutData.plant_assignments).length > 0);
 
+  // ── area grouping ────────────────────────────────────────────────────────
+  // Group units by area_name so we can plan one area at a time
+  const areaGroups = units.reduce((acc, unit) => {
+    const name = unit.area_name || garden?.name || 'My Garden';
+    if (!acc[name]) acc[name] = [];
+    acc[name].push(unit);
+    return acc;
+  }, {});
+  const areaNames = Object.keys(areaGroups);
+
+  // Does an area have any plant assignments yet?
+  const areaHasPlan = (areaName) => {
+    const areaUnits = areaGroups[areaName] || [];
+    return areaUnits.some(u => layoutData?.plant_assignments?.[String(u.id)]?.length > 0);
+  };
+
+  // Units belonging to the area currently being planned
+  const planningAreaUnits = planningAreaName ? (areaGroups[planningAreaName] || []) : [];
+
+  // Sun/type compatibility check — returns true if a plant can work in at least one unit of the area
+  const isPlantCompatibleWithArea = (plant, areaUnits) => {
+    if (!areaUnits || areaUnits.length === 0) return true;
+    const gardenSun = garden?.sun_exposure || 'full_sun';
+    const sunOk = areaUnits.some(unit => {
+      const unitSun = unit.sun_exposure || gardenSun;
+      if (plant.sun_requirement === 'full_sun') return unitSun === 'full_sun';
+      if (plant.sun_requirement === 'part_shade') return unitSun !== 'shade';
+      if (plant.sun_requirement === 'shade') return unitSun === 'shade' || unitSun === 'part_shade';
+      return true;
+    });
+    const plantTypes = (plant.garden_types || 'all').split(',').map(s => s.trim());
+    const typeOk = plantTypes.includes('all') || areaUnits.some(u => u.type_id && plantTypes.includes(u.type_id));
+    return sunOk && typeOk;
+  };
+
   // ── plant browsing ───────────────────────────────────────────────────────
   const zone = garden?.hardiness_zone ? parseInt(garden.hardiness_zone) : null;
 
-  // Plants shown in the must-haves picker: zone-filtered, search-filtered, grouped by category
+  // Plants shown in the must-haves picker: zone-filtered, search-filtered, grouped by category.
+  // When an area is selected, incompatible plants (wrong sun/type) are tagged and sorted last.
   const mustHavePickerGroups = PICKER_CATEGORY_ORDER.map(cat => ({
     key: cat,
     label: PICKER_CATEGORY_LABELS[cat],
@@ -118,7 +157,15 @@ export default function GardenView() {
         if (mustHaveSearch && !p.name.toLowerCase().includes(mustHaveSearch.toLowerCase())) return false;
         return true;
       })
-      .sort((a, b) => a.name.localeCompare(b.name)),
+      .map(p => ({
+        ...p,
+        _incompatible: planningAreaUnits.length > 0 && !isPlantCompatibleWithArea(p, planningAreaUnits),
+      }))
+      .sort((a, b) => {
+        if (a._incompatible && !b._incompatible) return 1;
+        if (!a._incompatible && b._incompatible) return -1;
+        return a.name.localeCompare(b.name);
+      }),
   })).filter(g => g.plants.length > 0);
 
   const filteredPlants = allPlants.filter(p => {
@@ -156,16 +203,24 @@ export default function GardenView() {
     }
   };
 
-  const handleRecommend = async (requiredPlantIds = []) => {
+  const handleRecommend = async (requiredPlantIds = [], areaName = null) => {
     setRecommending(true);
     try {
-      const body = requiredPlantIds.length > 0 ? { required_plant_ids: requiredPlantIds } : {};
+      const body = {};
+      if (requiredPlantIds.length > 0) body.required_plant_ids = requiredPlantIds;
+      // Scope planning to specific units when an area is selected
+      if (areaName) {
+        const areaUnitIds = (areaGroups[areaName] || []).map(u => u.id);
+        if (areaUnitIds.length > 0) body.unit_ids = areaUnitIds;
+      }
       await api.post(`/nli/recommend/${id}`, body);
       await loadGarden();
-      toast('AI plan ready!');
-      setTab('timeline');
+      toast(`Plan ready for ${areaName || 'your garden'}!`);
+      // Show review panel for this area instead of auto-navigating to timeline
+      setPendingReviewAreaName(areaName || areaNames[0] || null);
       setMustHavesMode(false);
       setMustHavePlantIds([]);
+      setPlanningAreaName(null);
     } catch (err) {
       console.error('Recommend error:', err);
       const msg = err.response?.data?.error
@@ -403,215 +458,73 @@ export default function GardenView() {
       {tab === 'layout' && (
         <div className="space-y-5">
 
-          {/* AI plan CTA */}
-          {!hasPlan && gardenPlants.length === 0 ? (
-            /* Hero state — brand new garden, no plants yet */
-            <div className="card p-8 space-y-6 border-2 border-dashed border-garden-200">
-              <div className="text-center space-y-2">
-                <div className="text-5xl">🌱</div>
-                <h2 className="text-xl font-bold text-gray-900">Ready to plan your beds?</h2>
-                <p className="text-gray-500 text-sm max-w-sm mx-auto">
-                  Let the AI build your plan, anchor it with must-haves, or build it yourself.
-                </p>
-              </div>
+          {/* ── Planning flow: area picker → method picker → must-haves → review ── */}
 
-              {/* Three option cards */}
-              {!mustHavesMode && !recommending && (
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  {/* Option 1: Full AI */}
-                  <button
-                    onClick={() => handleRecommend()}
-                    className="text-left p-4 rounded-xl border-2 border-garden-200 hover:border-garden-400 hover:bg-garden-50 transition-all space-y-1.5"
-                  >
-                    <div className="text-2xl">✨</div>
-                    <div className="font-semibold text-gray-900 text-sm">Full AI Plan</div>
-                    <p className="text-xs text-gray-500 leading-relaxed">AI picks and places everything — companions, rotation, succession, sun</p>
-                  </button>
-                  {/* Option 2: Must Haves + AI */}
-                  <button
-                    onClick={() => setMustHavesMode(true)}
-                    className="text-left p-4 rounded-xl border-2 border-amber-300 bg-amber-50/40 hover:border-amber-400 hover:bg-amber-50 transition-all space-y-1.5"
-                  >
-                    <div className="inline-flex items-center gap-1 text-xs font-bold text-amber-700 bg-amber-200 rounded-full px-2 py-0.5">⭐ Best for most gardeners</div>
-                    <div className="text-2xl">📌</div>
-                    <div className="font-semibold text-gray-900 text-sm">Must Haves + AI</div>
-                    <p className="text-xs text-gray-500 leading-relaxed">Pick up to 10 anchors — AI builds a full garden around them, adding compatible plants to fill your space</p>
-                  </button>
-                  {/* Option 3: Manual */}
-                  <button
-                    onClick={() => setTab('plants')}
-                    className="text-left p-4 rounded-xl border-2 border-gray-200 hover:border-gray-400 hover:bg-gray-50 transition-all space-y-1.5"
-                  >
-                    <div className="text-2xl">🖊</div>
-                    <div className="font-semibold text-gray-900 text-sm">Manual</div>
-                    <p className="text-xs text-gray-500 leading-relaxed">Browse the catalog, choose your plants, build your own layout</p>
-                  </button>
-                </div>
-              )}
-
-              {/* Must Haves picker */}
-              {mustHavesMode && !recommending && (
-                <div className="space-y-4">
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={() => { setMustHavesMode(false); setMustHavePlantIds([]); setMustHaveSearch(''); }}
-                      className="text-sm text-gray-400 hover:text-gray-600 transition-colors"
-                    >
-                      ← Back
-                    </button>
-                    <h3 className="font-semibold text-gray-900 text-sm">Select your must-have plants <span className="text-gray-400 font-normal">(up to {MAX_MUST_HAVES})</span></h3>
-                    {mustHavePlantIds.length > 0 && (
-                      <span className="ml-auto text-xs text-amber-700 font-medium bg-amber-100 px-2 py-0.5 rounded-full">
-                        {mustHavePlantIds.length} selected
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Selected plant chips */}
-                  {mustHavePlantIds.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {mustHavePlantIds.map(pid => {
-                        const plant = allPlants.find(p => p.id === pid);
-                        if (!plant) return null;
-                        return (
-                          <span key={pid} className="inline-flex items-center gap-1 bg-amber-100 text-amber-800 rounded-full px-3 py-1 text-sm font-medium">
-                            {plant.emoji} {plant.name}
-                            <button
-                              onClick={() => setMustHavePlantIds(prev => prev.filter(i => i !== pid))}
-                              className="ml-0.5 text-amber-600 hover:text-amber-900 leading-none"
-                            >×</button>
-                          </span>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {/* Search */}
-                  <input
-                    type="text"
-                    placeholder="Search plants…"
-                    value={mustHaveSearch}
-                    onChange={e => setMustHaveSearch(e.target.value)}
-                    className="input w-full text-sm"
-                  />
-
-                  {/* Plant grid grouped by category */}
-                  <div className="max-h-64 overflow-y-auto space-y-3 pr-1">
-                    {mustHavePickerGroups.map(group => (
-                      <div key={group.key}>
-                        <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1.5">{group.label}</div>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-                          {group.plants.map(plant => {
-                            const selected = mustHavePlantIds.includes(plant.id);
-                            const atCap = !selected && mustHavePlantIds.length >= MAX_MUST_HAVES;
-                            return (
-                              <button
-                                key={plant.id}
-                                onClick={() => toggleMustHavePlant(plant.id)}
-                                className={`flex items-center gap-2 p-2 rounded-lg border text-left transition-all ${
-                                  selected ? 'border-amber-400 bg-amber-50 ring-1 ring-amber-300'
-                                  : atCap   ? 'border-gray-100 opacity-40 cursor-not-allowed'
-                                  : 'border-gray-200 hover:border-amber-300 hover:bg-amber-50/50'
-                                }`}
-                              >
-                                <span className="text-lg flex-shrink-0">{plant.emoji}</span>
-                                <span className="font-medium text-gray-800 truncate text-xs leading-tight">{plant.name}</span>
-                                {selected && <span className="ml-auto text-amber-600 text-xs flex-shrink-0">✓</span>}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {mustHaveCapWarning && (
-                    <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                      Up to {MAX_MUST_HAVES} anchors — the AI will add more compatible plants on top of these to fill your beds. Remove one to swap in a different anchor.
-                    </p>
-                  )}
-
-                  <button
-                    onClick={() => handleRecommend(mustHavePlantIds)}
-                    disabled={mustHavePlantIds.length === 0}
-                    className="btn-primary w-full py-3 text-sm disabled:opacity-50"
-                  >
-                    {mustHavePlantIds.length === 0
-                      ? 'Select at least one plant to continue'
-                      : `Build Plan Around ${mustHavePlantIds.length} Plant${mustHavePlantIds.length !== 1 ? 's' : ''} →`}
-                  </button>
-                </div>
-              )}
-
-              {/* Loading state */}
-              {recommending && (
-                <div className="text-center space-y-2 py-4">
-                  <p className="text-base font-semibold text-garden-700">🌱 Building your plan…</p>
-                  <p className="text-sm text-garden-700 animate-pulse">{PLAN_STATUS_MESSAGES[planStatusIdx]}</p>
-                  <p className="text-xs text-gray-400">Usually takes a minute for larger gardens</p>
-                </div>
-              )}
-            </div>
-          ) : (
-            /* Compact banner when plan exists or plants have been manually added */
-            <div className={`rounded-xl border p-4 flex items-start justify-between gap-4 ${
-              hasPlan ? 'bg-garden-50 border-garden-200' : 'bg-amber-50 border-amber-200'
-            }`}>
-              <div>
-                {hasPlan ? (
-                  <>
-                    <p className="text-sm font-semibold text-garden-800">AI plant plan active</p>
-                    <p className="text-xs text-garden-700 mt-0.5">
-                      Plants are assigned to units based on space, companions, and sun. You can still add or remove plants manually.
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-sm font-semibold text-amber-800">No AI plan yet</p>
-                    <p className="text-xs text-amber-700 mt-0.5">
-                      Get an optimized layout based on your zone, sun, companion planting, and crop rotation.
-                    </p>
-                  </>
-                )}
-              </div>
-              <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                <button
-                  onClick={() => handleRecommend()}
-                  disabled={recommending}
-                  className={`text-sm font-semibold px-4 py-2 rounded-xl transition-all disabled:opacity-60 ${
-                    hasPlan
-                      ? 'bg-garden-600 hover:bg-garden-700 text-white'
-                      : 'bg-amber-500 hover:bg-amber-600 text-white'
-                  }`}
-                >
-                  {recommending ? '🌱 Planning…' : hasPlan ? '↺ Refresh Plan' : '✨ Get AI Plan'}
-                </button>
-                {!recommending && (
-                  <button
-                    onClick={() => { setMustHavesMode(true); setTab('layout'); window.scrollTo(0,0); }}
-                    className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
-                  >
-                    📌 with must-haves
-                  </button>
-                )}
-              </div>
-              {recommending && (
-                <p className="text-xs text-gray-500 mt-1 animate-pulse">{PLAN_STATUS_MESSAGES[planStatusIdx]}</p>
-              )}
+          {/* Loading state */}
+          {recommending && (
+            <div className="card p-8 text-center space-y-3 border-2 border-garden-200">
+              <div className="text-4xl animate-pulse">🌱</div>
+              <p className="text-base font-semibold text-garden-700">
+                Building plan{planningAreaName ? ` for ${planningAreaName}` : ''}…
+              </p>
+              <p className="text-sm text-garden-600 animate-pulse">{PLAN_STATUS_MESSAGES[planStatusIdx]}</p>
+              <p className="text-xs text-gray-400">Usually takes about a minute</p>
             </div>
           )}
 
-          {/* Must Haves picker — shown when triggered from the compact banner */}
-          {mustHavesMode && (hasPlan || gardenPlants.length > 0) && (
+          {/* Review panel — plan just came back for an area, awaiting accept */}
+          {!recommending && pendingReviewAreaName && (
+            <div className="card p-5 border-2 border-garden-300 bg-garden-50 space-y-3">
+              <div className="flex items-start gap-3">
+                <span className="text-2xl">🌿</span>
+                <div>
+                  <p className="font-semibold text-garden-800 text-sm">
+                    Plan ready for <span className="font-bold">{pendingReviewAreaName}</span>
+                  </p>
+                  <p className="text-xs text-garden-700 mt-0.5">
+                    Review the beds below — plants have been assigned with companion grouping, rotation, and sun requirements in mind.
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => { setPendingReviewAreaName(null); setTab('timeline'); }}
+                  className="btn-primary text-sm px-5 py-2"
+                >
+                  Looks good — show me the timeline →
+                </button>
+                <button
+                  onClick={() => { setPlanningAreaName(pendingReviewAreaName); setPendingReviewAreaName(null); }}
+                  className="btn-secondary text-sm px-4 py-2"
+                >
+                  ↺ Re-plan this area
+                </button>
+                {areaNames.filter(n => !areaHasPlan(n) && n !== pendingReviewAreaName).length > 0 && (
+                  <button
+                    onClick={() => setPendingReviewAreaName(null)}
+                    className="text-sm text-garden-600 hover:text-garden-800 transition-colors px-2"
+                  >
+                    Plan next area →
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Must-haves picker — shown when area is selected and user chose Must Haves + AI */}
+          {!recommending && !pendingReviewAreaName && mustHavesMode && planningAreaName && (
             <div className="card p-6 space-y-4 border-2 border-amber-200">
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => { setMustHavesMode(false); setMustHavePlantIds([]); setMustHaveSearch(''); }}
                   className="text-sm text-gray-400 hover:text-gray-600 transition-colors"
                 >
-                  ← Cancel
+                  ← Back
                 </button>
-                <h3 className="font-semibold text-gray-900 text-sm">📌 Select your must-have plants <span className="text-gray-400 font-normal">(up to {MAX_MUST_HAVES})</span></h3>
+                <h3 className="font-semibold text-gray-900 text-sm">
+                  📌 Must-haves for <span className="text-amber-700">{planningAreaName}</span>
+                  <span className="text-gray-400 font-normal ml-1">(up to {MAX_MUST_HAVES})</span>
+                </h3>
                 {mustHavePlantIds.length > 0 && (
                   <span className="ml-auto text-xs text-amber-700 font-medium bg-amber-100 px-2 py-0.5 rounded-full">
                     {mustHavePlantIds.length} selected
@@ -619,6 +532,24 @@ export default function GardenView() {
                 )}
               </div>
 
+              {/* Area constraint summary */}
+              {planningAreaUnits.length > 0 && (
+                <div className="flex flex-wrap gap-2 text-xs">
+                  {[...new Set(planningAreaUnits.map(u => u.sun_exposure || garden?.sun_exposure || 'full_sun'))].map(sun => (
+                    <span key={sun} className="bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-full px-2 py-0.5 capitalize">
+                      ☀️ {sun.replace(/_/g, ' ')}
+                    </span>
+                  ))}
+                  {[...new Set(planningAreaUnits.map(u => u.type_id).filter(Boolean))].map(type => (
+                    <span key={type} className="bg-gray-50 border border-gray-200 text-gray-600 rounded-full px-2 py-0.5">
+                      {GARDEN_TYPE_ICONS[type]} {type.replace(/_/g, ' ')}
+                    </span>
+                  ))}
+                  <span className="text-gray-400 italic">Plants with ⚠️ may not suit this area's conditions</span>
+                </div>
+              )}
+
+              {/* Selected plant chips */}
               {mustHavePlantIds.length > 0 && (
                 <div className="flex flex-wrap gap-2">
                   {mustHavePlantIds.map(pid => {
@@ -657,15 +588,20 @@ export default function GardenView() {
                           <button
                             key={plant.id}
                             onClick={() => toggleMustHavePlant(plant.id)}
+                            title={plant._incompatible ? 'Sun or bed type may not suit this area' : ''}
                             className={`flex items-center gap-2 p-2 rounded-lg border text-left transition-all ${
-                              selected ? 'border-amber-400 bg-amber-50 ring-1 ring-amber-300'
-                              : atCap   ? 'border-gray-100 opacity-40 cursor-not-allowed'
+                              selected          ? 'border-amber-400 bg-amber-50 ring-1 ring-amber-300'
+                              : atCap           ? 'border-gray-100 opacity-40 cursor-not-allowed'
+                              : plant._incompatible ? 'border-orange-200 hover:border-orange-300 hover:bg-orange-50/40'
                               : 'border-gray-200 hover:border-amber-300 hover:bg-amber-50/50'
                             }`}
                           >
                             <span className="text-lg flex-shrink-0">{plant.emoji}</span>
-                            <span className="font-medium text-gray-800 truncate text-xs leading-tight">{plant.name}</span>
+                            <span className={`font-medium truncate text-xs leading-tight ${plant._incompatible && !selected ? 'text-gray-500' : 'text-gray-800'}`}>
+                              {plant.name}
+                            </span>
                             {selected && <span className="ml-auto text-amber-600 text-xs flex-shrink-0">✓</span>}
+                            {!selected && plant._incompatible && <span className="ml-auto text-orange-400 text-xs flex-shrink-0">⚠️</span>}
                           </button>
                         );
                       })}
@@ -676,26 +612,128 @@ export default function GardenView() {
 
               {mustHaveCapWarning && (
                 <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                  Maximum {MAX_MUST_HAVES} plants — remove one to add another.
+                  Up to {MAX_MUST_HAVES} anchors — the AI will add more compatible plants to fill the beds. Remove one to swap in a different anchor.
                 </p>
               )}
 
-              {recommending ? (
-                <div className="text-center space-y-1 py-2">
-                  <p className="text-sm text-garden-700 font-medium animate-pulse">{PLAN_STATUS_MESSAGES[planStatusIdx]}</p>
-                  <p className="text-xs text-gray-400">Usually takes a minute for larger gardens</p>
-                </div>
-              ) : (
+              <button
+                onClick={() => handleRecommend(mustHavePlantIds, planningAreaName)}
+                disabled={mustHavePlantIds.length === 0}
+                className="btn-primary w-full py-3 text-sm disabled:opacity-50"
+              >
+                {mustHavePlantIds.length === 0
+                  ? 'Select at least one plant to continue'
+                  : `Build Plan Around ${mustHavePlantIds.length} Plant${mustHavePlantIds.length !== 1 ? 's' : ''} →`}
+              </button>
+            </div>
+          )}
+
+          {/* Method picker — shown once an area is selected but no mode chosen yet */}
+          {!recommending && !pendingReviewAreaName && !mustHavesMode && planningAreaName && (
+            <div className="card p-6 space-y-4 border-2 border-garden-200">
+              <div className="flex items-center gap-2">
                 <button
-                  onClick={() => handleRecommend(mustHavePlantIds)}
-                  disabled={mustHavePlantIds.length === 0}
-                  className="btn-primary w-full py-3 text-sm disabled:opacity-50"
+                  onClick={() => { setPlanningAreaName(null); setMustHavesMode(false); setMustHavePlantIds([]); }}
+                  className="text-sm text-gray-400 hover:text-gray-600 transition-colors"
                 >
-                  {mustHavePlantIds.length === 0
-                    ? 'Select at least one plant to continue'
-                    : `Build Plan Around ${mustHavePlantIds.length} Plant${mustHavePlantIds.length !== 1 ? 's' : ''} →`}
+                  ←
                 </button>
-              )}
+                <div>
+                  <p className="font-semibold text-gray-900 text-sm">Planning: <span className="text-garden-700">{planningAreaName}</span></p>
+                  <p className="text-xs text-gray-500">
+                    {planningAreaUnits.length} unit{planningAreaUnits.length !== 1 ? 's' : ''}
+                    {planningAreaUnits[0] && ` · ${(planningAreaUnits[0].sun_exposure || garden?.sun_exposure || 'full_sun').replace(/_/g, ' ')}`}
+                    {' · '}
+                    {planningAreaUnits.reduce((sum, u) => sum + ((parseFloat(u.width_ft) || 0) * (parseFloat(u.length_ft) || 0)), 0).toFixed(0)} sqft total
+                  </p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button
+                  onClick={() => setMustHavesMode(true)}
+                  className="text-left p-4 rounded-xl border-2 border-amber-300 bg-amber-50/40 hover:border-amber-400 hover:bg-amber-50 transition-all space-y-1.5"
+                >
+                  <div className="inline-flex items-center gap-1 text-xs font-bold text-amber-700 bg-amber-200 rounded-full px-2 py-0.5">⭐ Recommended</div>
+                  <div className="text-2xl">📌</div>
+                  <div className="font-semibold text-gray-900 text-sm">Must Haves + AI</div>
+                  <p className="text-xs text-gray-500 leading-relaxed">Pick your anchor plants — only shows what suits this area's sun &amp; bed type — AI fills the rest</p>
+                </button>
+                <button
+                  onClick={() => handleRecommend([], planningAreaName)}
+                  className="text-left p-4 rounded-xl border-2 border-garden-200 hover:border-garden-400 hover:bg-garden-50 transition-all space-y-1.5"
+                >
+                  <div className="text-2xl">✨</div>
+                  <div className="font-semibold text-gray-900 text-sm">Full AI Plan</div>
+                  <p className="text-xs text-gray-500 leading-relaxed">AI picks and places everything for this area — companions, rotation, succession, sun</p>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Area picker — top-level entry point */}
+          {!recommending && !pendingReviewAreaName && !mustHavesMode && !planningAreaName && areaNames.length > 0 && (
+            <div className="card p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-base font-bold text-gray-900">
+                    {areaNames.every(n => areaHasPlan(n)) ? 'Garden plan active' : 'Plan your garden'}
+                  </h2>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {areaNames.every(n => areaHasPlan(n))
+                      ? 'All areas planned. Re-plan any area below, or view the full timeline.'
+                      : 'Pick an area to plan — AI will be scoped to just that area\'s beds.'}
+                  </p>
+                </div>
+                {hasPlan && (
+                  <button onClick={() => setTab('timeline')} className="flex-shrink-0 text-sm text-garden-600 font-medium hover:text-garden-800 transition-colors">
+                    View timeline →
+                  </button>
+                )}
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {areaNames.map(areaName => {
+                  const areaUnits = areaGroups[areaName];
+                  const planned = areaHasPlan(areaName);
+                  const sunValues = [...new Set(areaUnits.map(u => u.sun_exposure || garden?.sun_exposure || 'full_sun'))];
+                  const totalSqft = areaUnits.reduce((sum, u) => sum + ((parseFloat(u.width_ft) || 0) * (parseFloat(u.length_ft) || 0)), 0);
+                  return (
+                    <button
+                      key={areaName}
+                      onClick={() => setPlanningAreaName(areaName)}
+                      className={`text-left p-4 rounded-xl border-2 transition-all space-y-2 ${
+                        planned
+                          ? 'border-garden-300 bg-garden-50 hover:border-garden-400 hover:bg-garden-100'
+                          : 'border-dashed border-gray-300 hover:border-garden-400 hover:bg-garden-50'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="font-semibold text-gray-900 text-sm leading-tight">{areaName}</span>
+                        {planned
+                          ? <span className="flex-shrink-0 text-xs font-medium text-garden-700 bg-garden-100 border border-garden-200 rounded-full px-2 py-0.5">✓ Planned</span>
+                          : <span className="flex-shrink-0 text-xs font-medium text-gray-500 bg-gray-100 rounded-full px-2 py-0.5">Unplanned</span>
+                        }
+                      </div>
+                      <div className="flex flex-wrap gap-1 text-xs text-gray-500">
+                        <span>{areaUnits.length} bed{areaUnits.length !== 1 ? 's' : ''}</span>
+                        <span>·</span>
+                        <span>{totalSqft.toFixed(0)} sqft</span>
+                        <span>·</span>
+                        <span className="capitalize">{sunValues.join(' / ').replace(/_/g, ' ')}</span>
+                      </div>
+                      <p className="text-xs text-garden-600 font-medium">{planned ? '↺ Re-plan this area' : '→ Plan this area'}</p>
+                    </button>
+                  );
+                })}
+              </div>
+              {/* Manual option at the bottom */}
+              <div className="pt-1 border-t border-gray-100">
+                <button
+                  onClick={() => setTab('plants')}
+                  className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  🖊 Prefer to pick plants manually?
+                </button>
+              </div>
             </div>
           )}
 
@@ -1028,11 +1066,10 @@ export default function GardenView() {
                 </p>
               </div>
               <button
-                onClick={() => { setTab('layout'); setTimeout(handleRecommend, 100); }}
-                disabled={recommending}
-                className="flex-shrink-0 bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-all disabled:opacity-60"
+                onClick={() => setTab('layout')}
+                className="flex-shrink-0 bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-all"
               >
-                {recommending ? '🌱 Planning…' : '✨ Get AI Plan'}
+                Plan my garden →
               </button>
             </div>
           )}

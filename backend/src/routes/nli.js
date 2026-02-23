@@ -260,6 +260,17 @@ router.post('/recommend/:gardenId', async (req, res) => {
       return res.status(400).json({ error: 'No layout units found — complete the garden builder step first' });
     }
 
+    // Optional: only plan specific units (per-area planning flow).
+    // When unit_ids is provided, the AI only receives and assigns those units;
+    // results are merged back without touching other units' existing assignments.
+    const requestedUnitIds = req.body.unit_ids ? req.body.unit_ids.map(Number) : null;
+    const planningUnits = requestedUnitIds
+      ? units.filter(u => requestedUnitIds.includes(u.id))
+      : units;
+    if (planningUnits.length === 0 && requestedUnitIds) {
+      return res.status(400).json({ error: 'No matching units found for the specified unit_ids' });
+    }
+
     const allPlants = db.prepare('SELECT * FROM plants ORDER BY name').all();
     const zone = String(garden.hardiness_zone || '6');
     const frost = FROST_DATES[zone] || FROST_DATES['6'];
@@ -297,13 +308,13 @@ router.post('/recommend/:gardenId', async (req, res) => {
       : '';
 
     // Group shared-soil units so the AI knows to treat them as one rotation zone
-    const sharedSoilUnitIds = units.filter(u => u.shared_soil).map(u => u.id);
+    const sharedSoilUnitIds = planningUnits.filter(u => u.shared_soil).map(u => u.id);
     const sharedSoilNote = sharedSoilUnitIds.length > 1
       ? `\nSHARED SOIL NOTE: Units ${sharedSoilUnitIds.join(', ')} share continuous soil. Treat them as ONE growing zone for crop rotation — do not repeat the same plant family across any of these units.`
       : '';
 
     // Build detailed per-unit summary including capacity, sun, and history
-    const unitSummary = units.map(u => {
+    const unitSummary = planningUnits.map(u => {
       const wft = parseFloat(u.width_ft) || 0;
       const lft = parseFloat(u.length_ft) || 0;
       const sqft = (wft * lft).toFixed(1);
@@ -323,8 +334,8 @@ router.post('/recommend/:gardenId', async (req, res) => {
       return `${p.name}${invasive} | ${lc} | ${p.category} | spacing: ${sp}" (needs ${(spFt * spFt).toFixed(2)} sqft each) | ${p.days_to_maturity}d | sun: ${p.sun_requirement} | companions: ${p.companions || 'none'} | antagonists: ${p.antagonists || 'none'} | types: ${p.garden_types}`;
     }).join('\n');
 
-    // Identify perennials already present in the garden's crop history — these will return automatically
-    const allPrevious = units.flatMap(u => (u.previous_plants || '').split(',').map(s => s.trim()).filter(Boolean));
+    // Identify perennials already present in the planning units' crop history — these will return automatically
+    const allPrevious = planningUnits.flatMap(u => (u.previous_plants || '').split(',').map(s => s.trim()).filter(Boolean));
     const perennialHistory = allPrevious.filter(name => {
       const match = allPlants.find(p => p.name.toLowerCase().includes(name.toLowerCase()) || name.toLowerCase().includes(p.name.toLowerCase()));
       return match && (match.lifecycle === 'perennial');
@@ -476,8 +487,35 @@ Omit sow_indoors for direct-sown crops. Provide all date fields (null if not app
       }
     }
 
+    // Merge results back — when planning a subset of units, preserve other units' existing data
+    const plannedUnitIdSet = new Set(planningUnits.map(u => String(u.id)));
+
+    // Merge plant_assignments: only overwrite entries for the units that were just planned
+    const mergedAssignments = { ...(layoutData.plant_assignments || {}), ...assignmentIds };
+
+    // Merge unit_plans: replace entries for planned units, keep everything else
+    const otherUnitPlans = (layoutData.unit_plans || []).filter(up => !plannedUnitIdSet.has(String(up.unit_id)));
+    const mergedUnitPlans = [...otherUnitPlans, ...unit_plans];
+
+    // Merge planting_schedule: replace entries for planned units, keep everything else
+    const otherSchedule = (layoutData.planting_schedule || []).filter(s => !plannedUnitIdSet.has(String(s.unit_id)));
+    const mergedSchedule = [...otherSchedule, ...planting_schedule];
+
+    // Merge capacity_warnings: replace warnings mentioning planned units, keep others
+    const otherWarnings = (layoutData.capacity_warnings || []).filter(w =>
+      !planningUnits.some(u => w.includes(`Unit ${u.id}`))
+    );
+    const mergedWarnings = [...otherWarnings, ...capacity_warnings];
+
     // Save back into layout_data — also persist the unit array with globally-unique IDs
-    const updatedLayout = { ...layoutData, units, plant_assignments: assignmentIds, unit_plans, planting_schedule, capacity_warnings };
+    const updatedLayout = {
+      ...layoutData,
+      units,
+      plant_assignments: mergedAssignments,
+      unit_plans: mergedUnitPlans,
+      planting_schedule: mergedSchedule,
+      capacity_warnings: mergedWarnings,
+    };
     db.prepare("UPDATE gardens SET layout_data = ?, updated_at = datetime('now') WHERE id = ?")
       .run(JSON.stringify(updatedLayout), req.params.gardenId);
 
