@@ -428,7 +428,7 @@ Omit sow_indoors for direct-sown crops. Provide all date fields (null if not app
 
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 8192,
+      max_tokens: 16000,
       messages: [{ role: 'user', content: prompt }],
     }, { timeout: 300000 }); // 5 min — large must-haves plans need time
 

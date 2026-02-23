@@ -1198,7 +1198,7 @@ export default function GardenWizard() {
                 )}
 
                 <div>
-                  <label className="label mb-3">Sun exposure</label>
+                  <p className="font-semibold text-gray-800 mb-3">Sun exposure</p>
                   <div className="grid grid-cols-3 gap-2">
                     {SUN_OPTIONS.map(s => (
                       <button
@@ -1221,7 +1221,7 @@ export default function GardenWizard() {
                 {/* Single-unit areas: collect history here to save a screen */}
                 {currentArea.units.length === 1 && (
                   <div>
-                    <label className="label">What grew here before? <span className="text-gray-400 font-normal">(optional)</span></label>
+                    <p className="font-semibold text-gray-800 mb-1">What grew here before? <span className="text-gray-400 font-normal text-sm">(optional)</span></p>
                     <p className="text-xs text-gray-500 mb-2">
                       Helps the AI plan crop rotation — leave blank if new or unknown.
                       If crops rotated mid-season, list both (e.g. "Bush beans, Bok choy").
