@@ -483,8 +483,11 @@ export default function GardenWizard() {
   const [cropSuggestions, setCropSuggestions] = useState(COMMON_CROPS);
   useEffect(() => {
     api.get('/plants').then(res => {
-      const names = (res.data.plants || []).map(p => p.name).sort();
-      if (names.length > 0) setCropSuggestions(names);
+      const dbNames = (res.data.plants || []).map(p => p.name);
+      // Merge DB names with COMMON_CROPS so hand-typed varieties like
+      // "Cherry tomatoes" still appear as suggestions even without a DB entry
+      const merged = [...new Set([...COMMON_CROPS, ...dbNames])].sort();
+      if (merged.length > 0) setCropSuggestions(merged);
     }).catch(() => {}); // silently fall back to COMMON_CROPS on error
   }, []);
 

@@ -2,7 +2,7 @@ import axios from 'axios';
 
 const api = axios.create({
   baseURL: '/api',
-  timeout: 90000,
+  timeout: 300000, // 5 min — large must-haves plans need time
 });
 
 // Attach token to every request

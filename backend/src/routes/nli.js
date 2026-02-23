@@ -262,8 +262,8 @@ router.post('/recommend/:gardenId', async (req, res) => {
     const zone = String(garden.hardiness_zone || '6');
     const frost = FROST_DATES[zone] || FROST_DATES['6'];
 
-    // Must Haves + AI mode: user pre-selected anchor plants
-    const requiredPlantIds = req.body.required_plant_ids || [];
+    // Must Haves + AI mode: user pre-selected anchor plants (capped at 10)
+    const requiredPlantIds = (req.body.required_plant_ids || []).slice(0, 10);
     const requiredPlants = requiredPlantIds.length > 0
       ? allPlants.filter(p => requiredPlantIds.includes(p.id))
       : [];
@@ -415,7 +415,7 @@ Omit sow_indoors for direct-sown crops. Use realistic ${new Date().getFullYear()
       model: 'claude-sonnet-4-6',
       max_tokens: 8192,
       messages: [{ role: 'user', content: prompt }],
-    }, { timeout: 90000 }); // 90s — large gardens need time
+    }, { timeout: 300000 }); // 5 min — large must-haves plans need time
 
     // Detect truncation before attempting parse
     if (response.stop_reason === 'max_tokens') {
@@ -485,7 +485,7 @@ Omit sow_indoors for direct-sown crops. Use realistic ${new Date().getFullYear()
       return res.status(500).json({ error: 'Anthropic API credits exhausted — add credits at console.anthropic.com and try again' });
     }
     if (err.message?.toLowerCase().includes('timed out') || err.code === 'ETIMEDOUT' || err.type === 'timeout') {
-      return res.status(500).json({ error: 'AI request timed out — your garden may be complex. Try again or simplify your layout.' });
+      return res.status(500).json({ error: 'AI request timed out — please try again.' });
     }
     res.status(500).json({ error: 'Recommendation failed: ' + (err.message || 'unknown error') });
   }
