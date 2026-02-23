@@ -295,14 +295,25 @@ router.post('/recommend/:gardenId', async (req, res) => {
       const sp = p.spacing_inches || 12;
       const spFt = sp / 12;
       const invasive = (p.name === 'Mint' || (p.antagonists || '').includes('spreads')) ? ' ⚠️INVASIVE' : '';
-      return `${p.name}${invasive} | ${p.category} | spacing: ${sp}" (needs ${(spFt * spFt).toFixed(2)} sqft each) | ${p.days_to_maturity}d | sun: ${p.sun_requirement} | companions: ${p.companions || 'none'} | antagonists: ${p.antagonists || 'none'} | types: ${p.garden_types}`;
+      const lc = p.lifecycle || 'annual';
+      return `${p.name}${invasive} | ${lc} | ${p.category} | spacing: ${sp}" (needs ${(spFt * spFt).toFixed(2)} sqft each) | ${p.days_to_maturity}d | sun: ${p.sun_requirement} | companions: ${p.companions || 'none'} | antagonists: ${p.antagonists || 'none'} | types: ${p.garden_types}`;
     }).join('\n');
+
+    // Identify perennials already present in the garden's crop history — these will return automatically
+    const allPrevious = units.flatMap(u => (u.previous_plants || '').split(',').map(s => s.trim()).filter(Boolean));
+    const perennialHistory = allPrevious.filter(name => {
+      const match = allPlants.find(p => p.name.toLowerCase().includes(name.toLowerCase()) || name.toLowerCase().includes(p.name.toLowerCase()));
+      return match && (match.lifecycle === 'perennial');
+    });
+    const perennialNote = perennialHistory.length
+      ? `\nESTABLISHED PERENNIALS: The following perennial plants were grown last year and WILL RETURN this season (do not skip them): ${perennialHistory.join(', ')}. Assign them back to their same units unless the gardener's notes indicate removal.`
+      : '';
 
     const prompt = `You are an expert organic garden planner. Create a precise, space-aware planting plan.
 
 GARDEN: ${garden.name}
 Zone: ${zone} | Last spring frost: ${frost.last} | First fall frost: ${frost.first}
-Irrigation: ${garden.irrigation_type} | Notes: ${garden.notes || 'none'}${varietyContext}
+Irrigation: ${garden.irrigation_type} | Notes: ${garden.notes || 'none'}${varietyContext}${perennialNote}
 
 GARDEN UNITS:
 ${unitSummary}${sharedSoilNote}
@@ -333,6 +344,10 @@ STRICT RULES — violations will produce a bad plan:
 9. SUCCESSION PLANTING: Maximize each unit's productivity across the season. Fast-maturing cool-season crops (Radish 25d, Lettuce 45d, Spinach 40d, Pea 60d) can occupy a unit early then be cleared before warm-season crops go in. When you plan this, assign BOTH the early and late crop to the unit. In the planting_schedule, mark the warm-season crop's succession_of field with the early crop's name. Example: Radish sown Feb, harvested May → Tomato transplanted May into the same unit.
 
 10. CAPACITY WARNINGS: If the selected plants cannot all fit given the space constraints, list the issue in capacity_warnings. Be specific: "Unit 3 (8 sqft) can fit 3 Tomatoes but 5 were planned — reduced to 3."
+
+11. PERENNIALS: Plants labeled "perennial" in the catalog return every year without replanting. If a unit's crop history includes a perennial, that plant WILL be present again this season — include it in the plan for that unit. Perennials should generally stay in the same dedicated spot year to year (crop rotation rules do not apply to them). Note perennials in the summary so the gardener understands which plants are permanent fixtures.
+
+12. BIENNIALS: Plants labeled "biennial" complete their life cycle over two years. In year 1 they grow vegetatively; in year 2 they flower and set seed before dying. For planning: if a biennial (e.g. Parsley, Celery, Leek, Swiss Chard, Beet, Carrot, Parsnip) was grown last year in a unit, note in the summary whether it is likely in its first or second year, since second-year biennials will bolt and should generally be removed unless the gardener wants seeds. When in doubt, treat them as annuals for space/rotation calculations.
 
 Return ONLY valid JSON:
 {
@@ -374,7 +389,7 @@ Omit sow_indoors for direct-sown crops. Use realistic ${new Date().getFullYear()
       model: 'claude-sonnet-4-6',
       max_tokens: 8192,
       messages: [{ role: 'user', content: prompt }],
-    });
+    }, { timeout: 90000 }); // 90s — large gardens need time
 
     // Detect truncation before attempting parse
     if (response.stop_reason === 'max_tokens') {
@@ -443,7 +458,10 @@ Omit sow_indoors for direct-sown crops. Use realistic ${new Date().getFullYear()
     if (err.status === 402 || err.error?.type === 'credit_balance_too_low' || (err.message || '').toLowerCase().includes('credit')) {
       return res.status(500).json({ error: 'Anthropic API credits exhausted — add credits at console.anthropic.com and try again' });
     }
-    res.status(500).json({ error: 'Recommendation failed: ' + err.message });
+    if (err.message?.toLowerCase().includes('timed out') || err.code === 'ETIMEDOUT' || err.type === 'timeout') {
+      return res.status(500).json({ error: 'AI request timed out — your garden may be complex. Try again or simplify your layout.' });
+    }
+    res.status(500).json({ error: 'Recommendation failed: ' + (err.message || 'unknown error') });
   }
 });
 

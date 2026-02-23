@@ -94,4 +94,19 @@ module.exports = db;
 // ── Idempotent migrations ───────────────────────────────────────────────────
 // Add user_id to plants so users can create custom plants
 try { db.exec("ALTER TABLE plants ADD COLUMN user_id TEXT REFERENCES users(id) ON DELETE CASCADE"); } catch {}
+// Add lifecycle column: 'annual' | 'perennial' | 'biennial'
+try { db.exec("ALTER TABLE plants ADD COLUMN lifecycle TEXT DEFAULT 'annual'"); } catch {}
+// Backfill lifecycle for perennials
+try {
+  db.exec(`UPDATE plants SET lifecycle = 'perennial' WHERE name IN (
+    'Asparagus','Strawberry','Mint','Chives','Rosemary','Thyme','Sage','Oregano',
+    'Lemon Balm','Lavender','Fennel','Blueberry','Raspberry'
+  ) AND (lifecycle IS NULL OR lifecycle = 'annual')`);
+} catch {}
+// Backfill lifecycle for biennials (grown as annuals but technically biennial)
+try {
+  db.exec(`UPDATE plants SET lifecycle = 'biennial' WHERE name IN (
+    'Parsley','Swiss Chard','Beet','Leek','Parsnip','Celery','Carrot'
+  ) AND (lifecycle IS NULL OR lifecycle = 'annual')`);
+} catch {}
 // Add variety_note to garden_plants (stored as notes field, already exists)

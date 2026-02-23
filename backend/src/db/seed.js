@@ -31,7 +31,7 @@ const plants = [
     companions: 'Tomato,Lettuce,Onion,Rosemary', antagonists: 'Dill,Parsnip',
     description: 'Root vegetable that needs loose, deep soil to grow straight.',
     planting_tips: 'Direct sow only — does not transplant. Thin to 3 inches apart.',
-    height_inches: 12, color: '#f97316'
+    height_inches: 12, color: '#f97316', lifecycle: 'biennial'
   },
   {
     id: uuidv4(), name: 'Lettuce', scientific_name: 'Lactuca sativa',
@@ -131,7 +131,7 @@ const plants = [
     companions: 'Lettuce,Spinach,Borage,Thyme', antagonists: 'Fennel,Cabbage',
     description: 'Perennial berry that spreads via runners.',
     planting_tips: 'Plant in slightly raised rows. Remove runners first year for bigger harvest.',
-    height_inches: 8, color: '#f43f5e'
+    height_inches: 8, color: '#f43f5e', lifecycle: 'perennial'
   },
   {
     id: uuidv4(), name: 'Marigold', scientific_name: 'Tagetes spp.',
@@ -161,7 +161,7 @@ const plants = [
     companions: 'Tomato,Brassicas,Peas', antagonists: 'Chamomile',
     description: 'Vigorous spreader. Best grown in containers to control spread.',
     planting_tips: 'Plant in containers to prevent invasive spreading.',
-    height_inches: 24, color: '#6ee7b7'
+    height_inches: 24, color: '#6ee7b7', lifecycle: 'perennial'
   },
   {
     id: uuidv4(), name: 'Chives', scientific_name: 'Allium schoenoprasum',
@@ -171,7 +171,7 @@ const plants = [
     companions: 'Carrot,Tomato,Apple', antagonists: 'Beans,Peas',
     description: 'Mild onion flavor. Deters aphids and Japanese beetles.',
     planting_tips: 'Divide clumps every 3 years. Cut back flowering to maintain flavor.',
-    height_inches: 12, color: '#a3e635'
+    height_inches: 12, color: '#a3e635', lifecycle: 'perennial'
   },
   {
     id: uuidv4(), name: 'Rosemary', scientific_name: 'Salvia rosmarinus',
@@ -181,7 +181,7 @@ const plants = [
     companions: 'Beans,Carrot,Cabbage,Sage', antagonists: 'Mint,Pumpkin',
     description: 'Drought-tolerant perennial herb. Repels cabbage moths.',
     planting_tips: 'Excellent drainage is essential. Prune after flowering.',
-    height_inches: 36, color: '#475569'
+    height_inches: 36, color: '#475569', lifecycle: 'perennial'
   },
   {
     id: uuidv4(), name: 'Thyme', scientific_name: 'Thymus vulgaris',
@@ -191,7 +191,7 @@ const plants = [
     companions: 'Tomato,Eggplant,Strawberry,Cabbage', antagonists: 'Basil',
     description: 'Low-growing perennial. Deters cabbage worms.',
     planting_tips: 'Excellent ground cover between taller plants. Well-drained soil.',
-    height_inches: 12, color: '#7c3aed'
+    height_inches: 12, color: '#7c3aed', lifecycle: 'perennial'
   },
   {
     id: uuidv4(), name: 'Garlic', scientific_name: 'Allium sativum',
@@ -282,7 +282,7 @@ const plants = [
     companions: 'Beans,Cabbage,Onion,Tomato', antagonists: null,
     description: 'Colorful stems, nutritious leaves. Tolerates heat better than spinach.',
     planting_tips: 'Harvest outer leaves regularly. Very ornamental — great for containers.',
-    height_inches: 18, color: '#dc2626'
+    height_inches: 18, color: '#dc2626', lifecycle: 'biennial'
   },
   {
     id: uuidv4(), name: 'Beet', scientific_name: 'Beta vulgaris',
@@ -292,7 +292,7 @@ const plants = [
     companions: 'Kohlrabi,Lettuce,Onion,Brassicas', antagonists: 'Pole Beans,Mustard',
     description: 'Dual harvest: roots and nutritious greens. Earthy, sweet flavor.',
     planting_tips: 'Direct sow. Thin to 4" apart. Edible greens throughout season.',
-    height_inches: 12, color: '#7e22ce'
+    height_inches: 12, color: '#7e22ce', lifecycle: 'biennial'
   },
   {
     id: uuidv4(), name: 'Corn', scientific_name: 'Zea mays',
@@ -342,7 +342,7 @@ const plants = [
     companions: 'Carrot,Celery,Onion,Parsnip', antagonists: 'Beans,Peas',
     description: 'Mild onion-family member. Harvest in fall through winter.',
     planting_tips: 'Start indoors early. Hill soil around stems to blanch and extend edible length.',
-    height_inches: 30, color: '#86efac'
+    height_inches: 30, color: '#86efac', lifecycle: 'biennial'
   },
   {
     id: uuidv4(), name: 'Parsnip', scientific_name: 'Pastinaca sativa',
@@ -352,7 +352,7 @@ const plants = [
     companions: 'Peas,Lettuce,Radish,Rosemary', antagonists: 'Carrot,Celery',
     description: 'Sweet root that improves after frost. Excellent winter keeper.',
     planting_tips: 'Direct sow early — slow to germinate. Deep loose soil for long roots.',
-    height_inches: 20, color: '#fef9c3'
+    height_inches: 20, color: '#fef9c3', lifecycle: 'biennial'
   },
   {
     id: uuidv4(), name: 'Green Onion', scientific_name: 'Allium cepa',
@@ -402,7 +402,7 @@ const plants = [
     companions: 'Tomato,Beans,Leek,Brassicas', antagonists: 'Parsnip,Carrot,Corn',
     description: 'Requires consistent moisture and cool temps. Very rewarding if patient.',
     planting_tips: 'Start indoors 10–12 weeks before transplant. Never let soil dry out.',
-    height_inches: 24, color: '#86efac'
+    height_inches: 24, color: '#86efac', lifecycle: 'biennial'
   },
   {
     id: uuidv4(), name: 'Hot Pepper', scientific_name: 'Capsicum annuum (hot)',
@@ -422,7 +422,7 @@ const plants = [
     companions: 'Tomato,Parsley,Basil,Marigold', antagonists: 'Onion,Garlic,Potato',
     description: 'Perennial that produces for 20+ years. Plant once, harvest forever.',
     planting_tips: 'Plant crowns 8" deep. Don\'t harvest first 2 years. Dedicate a permanent bed.',
-    height_inches: 60, color: '#4ade80'
+    height_inches: 60, color: '#4ade80', lifecycle: 'perennial'
   },
   {
     id: uuidv4(), name: 'Kohlrabi', scientific_name: 'Brassica oleracea var. gongylodes',
@@ -443,7 +443,7 @@ const plants = [
     companions: 'Tomato,Asparagus,Carrot,Rose', antagonists: 'Mint,Alliums',
     description: 'Biennial herb packed with vitamins. Attracts beneficial insects.',
     planting_tips: 'Slow to germinate. Soak seeds overnight. Great container herb.',
-    height_inches: 14, color: '#22c55e'
+    height_inches: 14, color: '#22c55e', lifecycle: 'biennial'
   },
   {
     id: uuidv4(), name: 'Dill', scientific_name: 'Anethum graveolens',
@@ -463,7 +463,7 @@ const plants = [
     companions: 'Rosemary,Beans,Brassicas,Carrot', antagonists: 'Basil,Onion,Garlic',
     description: 'Perennial herb with silvery leaves. Repels cabbage moths and carrot flies.',
     planting_tips: 'Cut back by 1/3 each spring. Excellent drought tolerance.',
-    height_inches: 20, color: '#9ca3af'
+    height_inches: 20, color: '#9ca3af', lifecycle: 'perennial'
   },
   {
     id: uuidv4(), name: 'Oregano', scientific_name: 'Origanum vulgare',
@@ -473,7 +473,7 @@ const plants = [
     companions: 'Tomato,Pepper,Basil,Squash', antagonists: null,
     description: 'Perennial Mediterranean herb. Gets stronger after cutting.',
     planting_tips: 'Cut back before flowering for best flavor. Spreads — divide every 3 years.',
-    height_inches: 12, color: '#4d7c0f'
+    height_inches: 12, color: '#4d7c0f', lifecycle: 'perennial'
   },
   {
     id: uuidv4(), name: 'Cilantro', scientific_name: 'Coriandrum sativum',
@@ -493,7 +493,7 @@ const plants = [
     companions: 'Tomato,Brassicas,Marigold,Rose', antagonists: null,
     description: 'Drought-tolerant perennial. Repels pests, attracts pollinators.',
     planting_tips: 'Excellent drainage is essential — will rot in wet soil. Trim after flowering.',
-    height_inches: 24, color: '#a855f7'
+    height_inches: 24, color: '#a855f7', lifecycle: 'perennial'
   },
   {
     id: uuidv4(), name: 'Chamomile', scientific_name: 'Matricaria chamomilla',
@@ -513,7 +513,7 @@ const plants = [
     companions: 'Tomato,Squash', antagonists: null,
     description: 'Lemony herb that spreads aggressively. Must be contained. Calms bees.',
     planting_tips: 'Plant ONLY in containers to prevent invasive spreading across the garden.',
-    height_inches: 24, color: '#fef08a'
+    height_inches: 24, color: '#fef08a', lifecycle: 'perennial'
   },
   {
     id: uuidv4(), name: 'Fennel', scientific_name: 'Foeniculum vulgare',
@@ -523,7 +523,7 @@ const plants = [
     companions: 'Dill', antagonists: 'Tomato,Pepper,Beans,Peas,Carrot,Coriander,Kohlrabi',
     description: 'Anise-flavored herb. ALLELOPATHIC — inhibits most neighboring plants.',
     planting_tips: 'Plant away from almost everything. Isolate or grow in its own section.',
-    height_inches: 60, color: '#84cc16'
+    height_inches: 60, color: '#84cc16', lifecycle: 'perennial'
   },
   // ── Fruits ───────────────────────────────────────────────────────────────────
   {
@@ -534,7 +534,7 @@ const plants = [
     companions: 'Strawberry,Thyme,Basil', antagonists: 'Tomato,Pepper',
     description: 'Perennial shrub. Needs acidic soil (pH 4.5–5.5). Plant 2+ varieties for best yield.',
     planting_tips: 'Acidify soil with sulfur. Mulch with pine needles. Takes 3 years to full production.',
-    height_inches: 60, color: '#6d28d9'
+    height_inches: 60, color: '#6d28d9', lifecycle: 'perennial'
   },
   {
     id: uuidv4(), name: 'Raspberry', scientific_name: 'Rubus idaeus',
@@ -544,7 +544,7 @@ const plants = [
     companions: 'Garlic,Marigold,Lavender', antagonists: 'Blackberry,Tomato,Potato',
     description: 'Perennial canes with summer and fall varieties. Spreads via suckers.',
     planting_tips: 'Trellis required. Prune old canes after fruiting. Remove suckers to control spread.',
-    height_inches: 60, color: '#e11d48'
+    height_inches: 60, color: '#e11d48', lifecycle: 'perennial'
   },
   {
     id: uuidv4(), name: 'Watermelon', scientific_name: 'Citrullus lanatus',
@@ -594,16 +594,16 @@ const insertPlant = db.prepare(`
   INSERT INTO plants
   (id, name, scientific_name, category, emoji, min_zone, max_zone, spacing_inches,
    days_to_maturity, sun_requirement, water_needs, garden_types, companions,
-   antagonists, description, planting_tips, height_inches, color)
+   antagonists, description, planting_tips, height_inches, color, lifecycle)
   VALUES
   (@id, @name, @scientific_name, @category, @emoji, @min_zone, @max_zone, @spacing_inches,
    @days_to_maturity, @sun_requirement, @water_needs, @garden_types, @companions,
-   @antagonists, @description, @planting_tips, @height_inches, @color)
+   @antagonists, @description, @planting_tips, @height_inches, @color, @lifecycle)
 `);
 
 db.exec('BEGIN');
 for (const plant of toInsert) {
-  insertPlant.run(plant);
+  insertPlant.run({ lifecycle: 'annual', ...plant }); // default annual; plant object overrides if set
 }
 db.exec('COMMIT');
 console.log(`✅ Seeded ${toInsert.length} new plants (total: ${existingNames.size + toInsert.length})`);

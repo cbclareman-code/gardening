@@ -131,7 +131,12 @@ export default function GardenView() {
       toast('AI plan ready!');
       setTab('timeline'); // Jump straight to the timeline so users see the plan
     } catch (err) {
-      toast(err.response?.data?.error || 'Recommendation failed — try again');
+      console.error('Recommend error:', err);
+      const msg = err.response?.data?.error
+        || (err.code === 'ECONNABORTED' ? 'Request timed out — the garden may be complex. Try again or simplify your layout.' : null)
+        || (err.message?.includes('Network') ? 'Network error — check your connection and try again.' : null)
+        || 'Recommendation failed — try again';
+      toast(msg);
     } finally {
       setRecommending(false);
     }

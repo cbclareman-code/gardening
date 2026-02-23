@@ -87,8 +87,8 @@ function syncUnits(area) {
         width_ft:  prev?.width_ft  ?? '',
         length_ft: prev?.length_ft ?? '',
         previous_plants: prev?.previous_plants ?? '',
-        x: prev?.x ?? 12 + (id - 1) * 22,
-        y: prev?.y ?? 12,
+        x: prev?.x ?? 230 + (id - 1) * 24,  // start near canvas center (CVS_W=560, so 560/2-50=230)
+        y: prev?.y ?? 170,                   // vertically centered (CVS_H=400, so 400/2-30=170)
       });
       id++;
     }
@@ -229,7 +229,7 @@ function rotatedBounds(w, h, deg) {
   return { bw: w * cos + h * sin, bh: w * sin + h * cos };
 }
 
-function GardenBuilder({ units, onLayoutChange, onUnitEdit }) {
+function GardenBuilder({ units, onLayoutChange, onUnitEdit, cropList = COMMON_CROPS }) {
   const [pos, setPos] = useState(() => {
     const p = {};
     units.forEach(u => { p[u.id] = { x: u.x ?? 12, y: u.y ?? 12 }; });
@@ -324,6 +324,7 @@ function GardenBuilder({ units, onLayoutChange, onUnitEdit }) {
 
   return (
     <div className="overflow-x-auto -mx-1">
+      <div className="flex justify-center">
       <div
         ref={canvasRef}
         className="relative rounded-xl border-2 border-gray-200 bg-gray-50 select-none touch-none"
@@ -412,6 +413,7 @@ function GardenBuilder({ units, onLayoutChange, onUnitEdit }) {
           )}
         </div>
       </div>
+      </div>{/* end flex justify-center */}
 
       {/* Hint row */}
       <p className="text-xs text-gray-400 mt-2 text-center">
@@ -463,7 +465,7 @@ function GardenBuilder({ units, onLayoutChange, onUnitEdit }) {
       )}
 
       <datalist id="crops-datalist">
-        {COMMON_CROPS.map(c => <option key={c} value={c} />)}
+        {cropList.map(c => <option key={c} value={c} />)}
       </datalist>
     </div>
   );
@@ -476,6 +478,15 @@ export default function GardenWizard() {
   const [saving, setSaving]   = useState(false);
   const [error,  setError]    = useState('');
   const photoRef = useRef();
+
+  // Dynamic plant name list — fetched from API so it stays in sync with the plant catalog
+  const [cropSuggestions, setCropSuggestions] = useState(COMMON_CROPS);
+  useEffect(() => {
+    api.get('/plants').then(res => {
+      const names = (res.data.plants || []).map(p => p.name).sort();
+      if (names.length > 0) setCropSuggestions(names);
+    }).catch(() => {}); // silently fall back to COMMON_CROPS on error
+  }, []);
 
   // Main steps: 0=Location, 1=Area count, 2=Area config loop, 3=Preferences, 4=Photo
   const [step,        setStep]        = useState(0);
@@ -1194,6 +1205,7 @@ export default function GardenWizard() {
                       value={currentArea.units[0]?.previous_plants ?? ''}
                       onChange={val => updateUnit(areaIndex, currentArea.units[0].id, { previous_plants: val })}
                       placeholder="e.g. Tomatoes, Basil — separate multiple crops with commas"
+                      suggestions={cropSuggestions}
                     />
                   </div>
                 )}
@@ -1239,6 +1251,7 @@ export default function GardenWizard() {
                           value={unit.previous_plants ?? ''}
                           onChange={val => updateUnitMaybeSynced(areaIndex, unit.id, { previous_plants: val })}
                           placeholder="e.g. Tomatoes, Basil — separate multiple with commas"
+                          suggestions={cropSuggestions}
                         />
                       </div>
                     );
@@ -1262,6 +1275,7 @@ export default function GardenWizard() {
 
                 <GardenBuilder
                   units={currentArea.units}
+                  cropList={cropSuggestions}
                   onUnitEdit={(unitId, changes) => updateUnit(areaIndex, unitId, changes)}
                   onLayoutChange={(positions, rots) => {
                     setForm(f => {
