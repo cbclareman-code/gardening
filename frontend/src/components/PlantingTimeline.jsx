@@ -76,6 +76,33 @@ export default function PlantingTimeline({ schedule, units, plants }) {
   const emojiByName = {};
   plants.forEach(p => { emojiByName[p.name] = p.emoji; });
 
+  // Compute "this week" tasks (today through next 7 days)
+  const weekEnd = new Date(today);
+  weekEnd.setDate(today.getDate() + 7);
+
+  const TASK_TYPES = [
+    { key: 'sow_indoors',         label: 'Start indoors',    icon: '🪴' },
+    { key: 'transplant_outdoors', label: 'Transplant out',   icon: '🌿' },
+    { key: 'first_harvest',       label: 'Begin harvesting', icon: '🧺' },
+    { key: 'clear_date',          label: 'Clear bed',        icon: '🫧' },
+    { key: 'soil_prep_date',      label: 'Prep soil',        icon: '🪱' },
+  ];
+
+  const thisWeekTasks = [];
+  schedule.forEach(item => {
+    TASK_TYPES.forEach(({ key, label, icon }) => {
+      if (!item[key]) return;
+      const d = new Date(item[key] + 'T12:00:00');
+      if (d >= today && d <= weekEnd) {
+        const unit = units.find(u => u.id === item.unit_id);
+        thisWeekTasks.push({ date: d, label, icon, plant: item.plant_name, unitLabel: unit?.label || item.area_name || 'Garden' });
+      }
+    });
+  });
+  thisWeekTasks.sort((a, b) => a.date - b.date);
+
+  const fmtDate = d => d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+
   // Group units by area
   const areaOrder = [];
   const areaUnits = {};
@@ -121,6 +148,26 @@ export default function PlantingTimeline({ schedule, units, plants }) {
       <p className="text-sm text-gray-500">
         {new Date().getFullYear()} growing calendar — dates are estimates, check your local last frost date.
       </p>
+
+      {/* This week panel */}
+      {thisWeekTasks.length > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <div className="flex items-center gap-2 mb-2.5">
+            <span className="text-base">📋</span>
+            <span className="text-sm font-semibold text-amber-900">Coming up this week</span>
+          </div>
+          <div className="space-y-1.5">
+            {thisWeekTasks.map((task, i) => (
+              <div key={i} className="flex items-center gap-3 text-sm">
+                <span className="text-base leading-none w-5 flex-shrink-0 text-center">{task.icon}</span>
+                <span className="text-amber-700 font-medium w-28 flex-shrink-0">{fmtDate(task.date)}</span>
+                <span className="text-gray-700">{task.label} <span className="font-medium">{task.plant}</span></span>
+                <span className="text-gray-400 text-xs">— {task.unitLabel}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Two-level filter: area row then unit row */}
       {(showAreaTabs || showUnitTabs) && (
