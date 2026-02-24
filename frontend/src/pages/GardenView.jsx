@@ -132,7 +132,7 @@ export default function GardenView() {
     const gardenSun = garden?.sun_exposure || 'full_sun';
     const sunOk = areaUnits.some(unit => {
       const unitSun = unit.sun_exposure || gardenSun;
-      if (plant.sun_requirement === 'full_sun') return unitSun === 'full_sun';
+      if (plant.sun_requirement === 'full_sun') return unitSun === 'full_sun' || unitSun === 'part_shade';
       if (plant.sun_requirement === 'part_shade') return unitSun !== 'shade';
       if (plant.sun_requirement === 'shade') return unitSun === 'shade' || unitSun === 'part_shade';
       return true;
@@ -501,7 +501,7 @@ export default function GardenView() {
                         <>
                           <button
                             onClick={() => { setPendingReviewAreaName(null); setPlanningAreaName(unplanned[0]); }}
-                            className="btn-primary flex-1 min-w-fit text-sm py-2.5"
+                            className="btn-primary text-sm"
                           >
                             Plan <span className="font-bold">{unplanned[0]}</span> next →
                           </button>
@@ -567,7 +567,7 @@ export default function GardenView() {
                       {GARDEN_TYPE_ICONS[type]} {type.replace(/_/g, ' ')}
                     </span>
                   ))}
-                  <span className="text-gray-400 italic">Plants with ⚠️ may not suit this area's conditions</span>
+                  <span className="text-gray-400 italic">Plants with <span className="not-italic">⚠️</span> may not suit this area's conditions</span>
                 </div>
               )}
 
@@ -722,7 +722,7 @@ export default function GardenView() {
                     <button
                       key={areaName}
                       onClick={() => setPlanningAreaName(areaName)}
-                      className={`text-left p-4 rounded-xl border-2 transition-all space-y-2 ${
+                      className={`text-left p-4 rounded-xl border-2 transition-all space-y-2 h-full ${
                         planned
                           ? 'border-garden-300 bg-garden-50 hover:border-garden-400 hover:bg-garden-100'
                           : 'border-dashed border-gray-300 hover:border-garden-400 hover:bg-garden-50'
@@ -768,65 +768,6 @@ export default function GardenView() {
             />
           </div>
 
-          {/* Plants in this garden list */}
-          {gardenPlants.length > 0 && (
-            <div className="card p-5">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-semibold text-gray-800">
-                  Plants in this garden ({gardenPlants.length})
-                </h3>
-                <button onClick={() => setTab('plants')} className="text-xs text-garden-600 hover:underline">
-                  + Add more
-                </button>
-              </div>
-              <div className="space-y-0">
-                {gardenPlants.map(gp => (
-                  <div key={gp.id} className="py-2 border-b border-gray-100 last:border-0">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xl">{gp.emoji}</span>
-                        <div>
-                          <span className="font-medium text-sm">{gp.name}</span>
-                          {gp.user_id && <span className="text-xs text-garden-600 ml-1.5">custom</span>}
-                          <span className="text-xs text-gray-500 ml-2 capitalize">{gp.category}</span>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3 text-xs text-gray-500">
-                        {gp.days_to_maturity && <span>{gp.days_to_maturity}d</span>}
-                        {gp.spacing_inches && <span>{gp.spacing_inches}" spacing</span>}
-                        <button
-                          onClick={() => togglePlant({ id: gp.plant_id, name: gp.name })}
-                          className="text-red-400 hover:text-red-600 transition-colors"
-                        >Remove</button>
-                      </div>
-                    </div>
-                    {/* Variety note — inline editable */}
-                    {editingVarietyId === gp.id ? (
-                      <div className="mt-1 flex items-center gap-2 ml-8">
-                        <input
-                          autoFocus
-                          className="input text-xs py-1 flex-1"
-                          value={varietyDraft}
-                          onChange={e => setVarietyDraft(e.target.value)}
-                          placeholder="e.g. Sungold, Cherokee Purple, Brandywine"
-                          onKeyDown={e => { if (e.key === 'Enter') handleSaveVariety(gp.id); if (e.key === 'Escape') setEditingVarietyId(null); }}
-                        />
-                        <button onClick={() => handleSaveVariety(gp.id)} className="text-xs text-garden-600 font-medium hover:text-garden-800">Save</button>
-                        <button onClick={() => setEditingVarietyId(null)} className="text-xs text-gray-400 hover:text-gray-600">Cancel</button>
-                      </div>
-                    ) : (
-                      <button
-                        className="mt-0.5 ml-8 text-xs text-gray-400 hover:text-garden-600 transition-colors"
-                        onClick={() => { setEditingVarietyId(gp.id); setVarietyDraft(gp.notes || ''); }}
-                      >
-                        {gp.notes ? `variety: ${gp.notes} ✏️` : '+ add variety'}
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
 
           {/* Drag-and-drop manual planner */}
           {gardenPlants.length > 0 && units.length > 0 && (

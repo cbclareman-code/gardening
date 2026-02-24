@@ -329,7 +329,13 @@ function AreaCarousel({ units, plants, layoutData, onPlantRemove }) {
                       </td>
                       <td className="px-3 py-2 text-gray-700 leading-relaxed">{up.this_year}</td>
                       <td className="px-3 py-2 text-gray-500 italic leading-relaxed">{up.last_year || '—'}</td>
-                      <td className="px-3 py-2 text-gray-600 leading-relaxed">{up.rationale}</td>
+                      <td className="px-3 py-2 text-gray-600 leading-relaxed">
+                        <ul className="list-disc list-inside space-y-0.5">
+                          {(up.rationale || '').split('\n').filter(Boolean).map((line, li) => (
+                            <li key={li} className="text-xs">{line}</li>
+                          ))}
+                        </ul>
+                      </td>
                     </tr>
                   );
                 })}

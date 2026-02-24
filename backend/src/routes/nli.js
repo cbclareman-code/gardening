@@ -388,6 +388,8 @@ STRICT RULES — violations will produce a bad plan:
 
 12. BIENNIALS: Plants labeled "biennial" complete their life cycle over two years. In year 1 they grow vegetatively; in year 2 they flower and set seed before dying. For planning: if a biennial (e.g. Parsley, Celery, Leek, Swiss Chard, Beet, Carrot, Parsnip) was grown last year in a unit, note in the summary whether it is likely in its first or second year, since second-year biennials will bolt and should generally be removed unless the gardener wants seeds. When in doubt, treat them as annuals for space/rotation calculations.
 
+For "rationale": write one line per plant or companion group, separated by \n (newline). Format each line as "Plant(s): brief reason". Keep each line short and direct. No paragraph prose.
+
 Return ONLY valid JSON:
 {
   "plant_assignments": {
@@ -399,7 +401,7 @@ Return ONLY valid JSON:
       "unit_id": 1,
       "this_year": "3 × Tomato, 2 × Basil, 4 × Marigold, Radish (early succession)",
       "last_year": "Cucumbers, Beans (different family — rotation ✓)",
-      "rationale": "Full sun suits tomatoes; basil + marigold deter aphids and whitefly; radishes clear by May before tomatoes go in."
+      "rationale": "Tomato: full sun, main crop\nBasil & Marigold: deter aphids and whitefly — classic companions\nRadish: succession crop, clears by May before tomatoes go in"
     }
   ],
   "capacity_warnings": [],
