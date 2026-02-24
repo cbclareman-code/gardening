@@ -55,9 +55,52 @@ function getMonthEvent(mi, item) {
   return evt;
 }
 
+const ICS_LABELS = {
+  sow_indoors:         '🪴 Start indoors',
+  transplant_outdoors: '🌿 Transplant outdoors',
+  first_harvest:       '🧺 Begin harvesting',
+  clear_date:          '🫧 Clear bed',
+  soil_prep_date:      '🪱 Prep soil',
+};
+
+function buildICS(schedule, units) {
+  const icsDate = str => str.replace(/-/g, '');
+  const nextDay = str => {
+    const d = new Date(str + 'T12:00:00');
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().slice(0, 10).replace(/-/g, '');
+  };
+
+  const lines = [
+    'BEGIN:VCALENDAR', 'VERSION:2.0',
+    'PRODID:-//Garden Planner//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
+  ];
+
+  schedule.forEach(item => {
+    Object.entries(ICS_LABELS).forEach(([key, label]) => {
+      if (!item[key]) return;
+      const bed = units.find(u => u.id === item.unit_id)?.label || item.area_name || 'Garden';
+      lines.push(
+        'BEGIN:VEVENT',
+        `UID:${item.plant_name}-${key}-${item[key]}-${item.unit_id}@gardenplanner`,
+        `DTSTART;VALUE=DATE:${icsDate(item[key])}`,
+        `DTEND;VALUE=DATE:${nextDay(item[key])}`,
+        `SUMMARY:${label}: ${item.plant_name} (${bed})`,
+        `DESCRIPTION:${bed}${item.notes ? ' — ' + item.notes.replace(/,/g, '\\,') : ''}`,
+        'END:VEVENT',
+      );
+    });
+  });
+
+  lines.push('END:VCALENDAR');
+  return lines.join('\r\n');
+}
+
 export default function PlantingTimeline({ schedule, units, plants }) {
   const [activeArea, setActiveArea] = useState(null);
   const [activeUnit, setActiveUnit] = useState(null);
+  const [calendarDone, setCalendarDone] = useState(false);
+  const [suppliesOpen, setSuppliesOpen] = useState(false);
 
   if (!schedule || schedule.length === 0) {
     return (
@@ -102,6 +145,37 @@ export default function PlantingTimeline({ schedule, units, plants }) {
   thisWeekTasks.sort((a, b) => a.date - b.date);
 
   const fmtDate = d => d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+
+  // Contextual supplies checklist
+  const hasIndoorSowing  = schedule.some(i => i.sow_indoors);
+  const hasVertical      = units.some(u => u.type_id === 'vertical');
+  const coldMonths       = [0, 1, 2, 3, 9, 10, 11];
+  const hasColdTransplant = schedule.some(i => {
+    if (!i.transplant_outdoors) return false;
+    return coldMonths.includes(monthOf(i.transplant_outdoors));
+  });
+  const hasBeds = units.some(u => ['raised_bed', 'in_ground', 'hugelkultur'].includes(u.type_id));
+
+  const supplies = [
+    ...(hasIndoorSowing ? [
+      { icon: '🌱', item: 'Seed trays or cell packs',   why: 'For starting seeds indoors before transplanting out' },
+      { icon: '🪨', item: 'Seed-starting mix',           why: 'Lighter than potting soil — better germination rates' },
+      { icon: '🌡️', item: 'Heat mat',                    why: 'Speeds up germination for tomatoes, peppers, and basil' },
+    ] : []),
+    ...(hasVertical ? [
+      { icon: '🪵', item: 'Trellis or stakes',           why: 'Your vertical bed needs a support structure' },
+    ] : []),
+    ...(hasColdTransplant ? [
+      { icon: '🧊', item: 'Row cover / frost cloth',     why: 'Protects early transplants if frost threatens' },
+    ] : []),
+    ...(hasBeds ? [
+      { icon: '🥄', item: 'Trowel',                      why: 'Essential for transplanting and spot digging' },
+      { icon: '📏', item: 'Spacing ruler or dibber',     why: 'Helps you plant at the right distance every time' },
+    ] : []),
+    { icon: '🪣', item: 'Mulch',                         why: 'Retains moisture and suppresses weeds — universally useful' },
+    { icon: '🧺', item: 'Harvest basket',                why: 'You\'ll have plenty to bring in once things get going' },
+    { icon: '✂️', item: 'Garden scissors or snips',      why: 'For herbs, leafy greens, and deadheading' },
+  ];
 
   // Group units by area
   const areaOrder = [];
@@ -336,7 +410,7 @@ export default function PlantingTimeline({ schedule, units, plants }) {
           </table>
         </div>
 
-        {/* Persistent legend — sits to the right of the scrollable table */}
+        {/* Persistent legend — sits to the right of the scrollable table, below the CTA panel */}
         <div className="flex-shrink-0 rounded-xl border border-gray-200 bg-white p-3 flex flex-col gap-2 text-xs text-gray-600 self-stretch">
           <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Key</div>
           {Object.entries(EVENTS).reverse().map(([key, cfg]) => (
@@ -350,6 +424,65 @@ export default function PlantingTimeline({ schedule, units, plants }) {
             <span className="whitespace-nowrap">This month</span>
           </div>
         </div>
+      </div>
+
+      {/* Next steps CTAs */}
+      <div className="rounded-xl border border-gray-200 bg-white p-5">
+        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">Next steps</p>
+        <div className="flex flex-wrap gap-3 items-center">
+          {/* Primary: calendar download */}
+          <button
+            onClick={() => {
+              const blob = new Blob([buildICS(schedule, units)], { type: 'text/calendar;charset=utf-8' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url; a.download = 'garden-plan.ics'; a.click();
+              URL.revokeObjectURL(url);
+              setCalendarDone(true);
+            }}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border transition-all ${
+              calendarDone
+                ? 'bg-white text-garden-700 border-garden-300'
+                : 'bg-garden-600 text-white border-garden-600 hover:bg-garden-700'
+            }`}
+          >
+            <span>{calendarDone ? '✓' : '📅'}</span>
+            <span>{calendarDone ? 'Calendar downloaded' : 'Add to calendar'}</span>
+          </button>
+
+          {/* Secondary → Primary after calendar done */}
+          <button
+            onClick={() => setSuppliesOpen(v => !v)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border transition-all ${
+              calendarDone
+                ? 'bg-garden-600 text-white border-garden-600 hover:bg-garden-700'
+                : 'bg-white text-gray-600 border-gray-200 hover:border-garden-300'
+            }`}
+          >
+            <span>🛒</span>
+            <span>{suppliesOpen ? 'Hide checklist' : 'What to buy'}</span>
+          </button>
+
+          {calendarDone && !suppliesOpen && (
+            <span className="text-xs text-gray-400">Open the downloaded file to import into Google Calendar, Apple Calendar, or Outlook.</span>
+          )}
+        </div>
+
+        {/* Supplies checklist — expands when button is clicked */}
+        {suppliesOpen && (
+          <div className="mt-4 pt-4 border-t border-gray-100 space-y-2.5">
+            <p className="text-xs text-gray-500 mb-3">Based on your specific plan:</p>
+            {supplies.map((s, i) => (
+              <div key={i} className="flex items-start gap-3">
+                <span className="text-lg leading-none flex-shrink-0 mt-0.5">{s.icon}</span>
+                <div className="min-w-0">
+                  <span className="text-sm font-medium text-gray-800">{s.item}</span>
+                  <span className="text-xs text-gray-500 ml-2">{s.why}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
