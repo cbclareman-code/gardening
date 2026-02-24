@@ -57,13 +57,14 @@ function getMonthEvent(mi, item) {
 
 export default function PlantingTimeline({ schedule, units, plants }) {
   const [activeArea, setActiveArea] = useState(null);
+  const [activeUnit, setActiveUnit] = useState(null);
 
   if (!schedule || schedule.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-gray-400">
         <div className="text-4xl mb-3">📅</div>
         <p className="font-medium">No planting schedule yet</p>
-        <p className="text-sm mt-1">Get an AI plant plan to see your {new Date().getFullYear()} growing timeline</p>
+        <p className="text-sm mt-1">Get an AI plant plan to see your {new Date().getFullYear()} growing calendar</p>
       </div>
     );
   }
@@ -108,8 +109,12 @@ export default function PlantingTimeline({ schedule, units, plants }) {
     byUnit[item.unit_id].push(item);
   });
 
-  // Units that have schedule data for this area
-  const activeUnitIds = [...new Set(scheduleForArea.map(i => i.unit_id))];
+  // Units that have schedule data — filtered by active unit if one is selected
+  let activeUnitIds = [...new Set(scheduleForArea.map(i => i.unit_id))];
+  if (activeUnit !== null) activeUnitIds = activeUnitIds.filter(id => id === activeUnit);
+
+  const showAreaTabs = areas.length > 1;
+  const showUnitTabs = thisAreaUnits.length > 1;
 
   return (
     <div className="space-y-4">
@@ -117,153 +122,186 @@ export default function PlantingTimeline({ schedule, units, plants }) {
         {new Date().getFullYear()} growing calendar — dates are estimates, check your local last frost date.
       </p>
 
-      {/* Area tabs */}
-      {areas.length > 1 && (
-        <div className="flex gap-1 flex-wrap">
-          {areas.map(area => (
-            <button
-              key={area}
-              onClick={() => setActiveArea(area)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
-                area === currentArea
-                  ? 'bg-garden-600 text-white border-garden-600'
-                  : 'bg-white text-gray-600 border-gray-200 hover:border-garden-300'
-              }`}
-            >
-              {area}
-            </button>
-          ))}
+      {/* Two-level filter: area row then unit row */}
+      {(showAreaTabs || showUnitTabs) && (
+        <div className="space-y-2">
+          {/* Row 1: Area tabs */}
+          {showAreaTabs && (
+            <div className="flex gap-1 flex-wrap">
+              {areas.map(area => (
+                <button
+                  key={area}
+                  onClick={() => { setActiveArea(area); setActiveUnit(null); }}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border ${
+                    area === currentArea
+                      ? 'bg-garden-600 text-white border-garden-600'
+                      : 'bg-white text-gray-600 border-gray-200 hover:border-garden-300'
+                  }`}
+                >
+                  {area}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Row 2: Unit tabs */}
+          {showUnitTabs && (
+            <div className={`flex gap-1 flex-wrap ${showAreaTabs ? 'pl-3 border-l-2 border-garden-100' : ''}`}>
+              <button
+                onClick={() => setActiveUnit(null)}
+                className={`px-3 py-1 rounded-md text-xs font-medium transition-all border ${
+                  activeUnit === null
+                    ? 'bg-garden-100 text-garden-700 border-garden-300'
+                    : 'bg-white text-gray-500 border-gray-200 hover:border-garden-200'
+                }`}
+              >
+                All beds
+              </button>
+              {thisAreaUnits.map(u => (
+                <button
+                  key={u.id}
+                  onClick={() => setActiveUnit(u.id)}
+                  className={`px-3 py-1 rounded-md text-xs font-medium transition-all border ${
+                    activeUnit === u.id
+                      ? 'bg-garden-100 text-garden-700 border-garden-300'
+                      : 'bg-white text-gray-500 border-gray-200 hover:border-garden-200'
+                  }`}
+                >
+                  {u.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
-      {/* Timeline grid */}
-      <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
-        <table className="border-collapse" style={{ minWidth: 680 }}>
-          <thead>
-            <tr className="bg-gray-50 border-b-2 border-gray-200">
-              {/* Plant label column */}
-              <th className="sticky left-0 z-10 bg-gray-50 text-left px-3 py-2.5 text-xs font-bold text-gray-500 border-r border-gray-200 whitespace-nowrap min-w-36">
-                Bed / Plant
-              </th>
-              {MONTHS.map((m, mi) => (
-                <th
-                  key={m}
-                  className={`text-center py-2.5 text-xs font-semibold border-r border-gray-100 w-14 ${
-                    mi === todayMonth ? 'text-red-500 bg-red-50' : 'text-gray-600'
-                  }`}
-                >
-                  {m}
+      {/* Timeline + persistent legend side by side */}
+      <div className="flex gap-3 items-start">
+        {/* Timeline grid */}
+        <div className="overflow-x-auto flex-1 rounded-xl border border-gray-200 bg-white">
+          <table className="border-collapse" style={{ minWidth: 680 }}>
+            <thead>
+              <tr className="bg-gray-50 border-b-2 border-gray-200">
+                {/* Plant label column */}
+                <th className="sticky left-0 z-10 bg-gray-50 text-left px-3 py-2.5 text-xs font-bold text-gray-500 border-r border-gray-200 whitespace-nowrap min-w-36">
+                  Bed / Plant
                 </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {activeUnitIds.map((unitId, ui) => {
-              const unit = units.find(u => u.id === unitId);
-              const unitItems = byUnit[unitId] || [];
-              const borderColor = TYPE_BORDER[unit?.type_id] || '#6b7280';
+                {MONTHS.map((m, mi) => (
+                  <th
+                    key={m}
+                    className={`text-center py-2.5 text-xs font-semibold border-r border-gray-100 w-14 ${
+                      mi === todayMonth ? 'text-red-500 bg-red-50' : 'text-gray-600'
+                    }`}
+                  >
+                    {m}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {activeUnitIds.map((unitId, ui) => {
+                const unit = units.find(u => u.id === unitId);
+                const unitItems = byUnit[unitId] || [];
+                const borderColor = TYPE_BORDER[unit?.type_id] || '#6b7280';
 
-              return (
-                <React.Fragment key={unitId}>
-                  {/* Unit header row */}
-                  <tr className="bg-gray-50/80 border-b border-gray-100">
-                    <td
-                      colSpan={13}
-                      className="px-3 py-1.5 text-xs font-bold text-gray-700"
-                      style={{ borderLeft: `3px solid ${borderColor}` }}
-                    >
-                      {unit?.label || `Unit ${unitId}`}
-                      {unit?.area_name && unit.area_name !== currentArea && (
-                        <span className="ml-2 text-gray-400 font-normal">({unit.area_name})</span>
-                      )}
-                    </td>
-                  </tr>
-
-                  {/* Plant rows */}
-                  {unitItems.map((item, ii) => {
-                    const emoji = emojiByName[item.plant_name] || '🌱';
-                    return (
-                      <tr
-                        key={`${unitId}-${ii}`}
-                        className={`border-b border-gray-50 hover:bg-gray-50/50 ${
-                          ui > 0 || ii > 0 ? '' : ''
-                        }`}
+                return (
+                  <React.Fragment key={unitId}>
+                    {/* Unit header row */}
+                    <tr className="bg-gray-50/80 border-b border-gray-100">
+                      <td
+                        colSpan={13}
+                        className="px-3 py-1.5 text-xs font-bold text-gray-700"
+                        style={{ borderLeft: `3px solid ${borderColor}` }}
                       >
-                        {/* Plant name cell */}
-                        <td
-                          className="sticky left-0 bg-white border-r border-gray-200 px-3 py-1.5"
-                          style={{ borderLeft: `3px solid ${borderColor}` }}
+                        {unit?.label || `Unit ${unitId}`}
+                        {unit?.area_name && unit.area_name !== currentArea && (
+                          <span className="ml-2 text-gray-400 font-normal">({unit.area_name})</span>
+                        )}
+                      </td>
+                    </tr>
+
+                    {/* Plant rows */}
+                    {unitItems.map((item, ii) => {
+                      const emoji = emojiByName[item.plant_name] || '🌱';
+                      return (
+                        <tr
+                          key={`${unitId}-${ii}`}
+                          className="border-b border-gray-50 hover:bg-gray-50/50"
                         >
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="text-base leading-none flex-shrink-0">{emoji}</span>
-                            <div className="min-w-0">
-                              <div className="text-xs font-medium text-gray-700 truncate leading-tight">
-                                {item.plant_name}
+                          {/* Plant name cell */}
+                          <td
+                            className="sticky left-0 bg-white border-r border-gray-200 px-3 py-1.5"
+                            style={{ borderLeft: `3px solid ${borderColor}` }}
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="text-base leading-none flex-shrink-0">{emoji}</span>
+                              <div className="min-w-0">
+                                <div className="text-xs font-medium text-gray-700 truncate leading-tight">
+                                  {item.plant_name}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        </td>
+                          </td>
 
-                        {/* Month cells — pure color bars, no text (use legend + tooltip) */}
-                        {MONTHS.map((m, mi) => {
-                          const evt = getMonthEvent(mi, item);
-                          const cfg = evt ? EVENTS[evt] : null;
-                          const isToday = mi === todayMonth;
-                          const prevEvt = mi > 0 ? getMonthEvent(mi - 1, item) : null;
-                          const nextEvt = mi < 11 ? getMonthEvent(mi + 1, item) : null;
-                          const isFirst = evt && evt !== prevEvt;
-                          const isLast  = evt && evt !== nextEvt;
-                          return (
-                            <td
-                              key={mi}
-                              className={`relative border-r border-gray-100 p-0 h-8 ${
-                                isToday && !evt ? 'bg-red-50/40' : ''
-                              }`}
-                              style={{ backgroundColor: cfg ? cfg.bg : undefined }}
-                              title={cfg ? `${item.plant_name} — ${cfg.label} (${m})` : `${item.plant_name} (${m})`}
-                            >
-                              {/* Round the leading and trailing edge of each activity segment */}
-                              {cfg && isFirst && (
-                                <div className="absolute left-0 inset-y-1 w-1.5 rounded-l-full"
-                                  style={{ backgroundColor: cfg.bg, filter: 'brightness(0.85)' }} />
-                              )}
-                              {cfg && isLast && (
-                                <div className="absolute right-0 inset-y-1 w-1.5 rounded-r-full"
-                                  style={{ backgroundColor: cfg.bg, filter: 'brightness(0.85)' }} />
-                              )}
-                              {/* Today marker line */}
-                              {isToday && (
-                                <div className="absolute inset-0 flex items-stretch pointer-events-none z-10">
-                                  <div className="w-0.5 bg-red-400 opacity-80 mx-auto" />
-                                </div>
-                              )}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    );
-                  })}
-                </React.Fragment>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+                          {/* Month cells — pure color bars, no text (use legend + tooltip) */}
+                          {MONTHS.map((m, mi) => {
+                            const evt = getMonthEvent(mi, item);
+                            const cfg = evt ? EVENTS[evt] : null;
+                            const isToday = mi === todayMonth;
+                            const prevEvt = mi > 0 ? getMonthEvent(mi - 1, item) : null;
+                            const nextEvt = mi < 11 ? getMonthEvent(mi + 1, item) : null;
+                            const isFirst = evt && evt !== prevEvt;
+                            const isLast  = evt && evt !== nextEvt;
+                            return (
+                              <td
+                                key={mi}
+                                className={`relative border-r border-gray-100 p-0 h-8 ${
+                                  isToday && !evt ? 'bg-red-50/40' : ''
+                                }`}
+                                style={{ backgroundColor: cfg ? cfg.bg : undefined }}
+                                title={cfg ? `${item.plant_name} — ${cfg.label} (${m})` : `${item.plant_name} (${m})`}
+                              >
+                                {/* Round the leading and trailing edge of each activity segment */}
+                                {cfg && isFirst && (
+                                  <div className="absolute left-0 inset-y-1 w-1.5 rounded-l-full"
+                                    style={{ backgroundColor: cfg.bg, filter: 'brightness(0.85)' }} />
+                                )}
+                                {cfg && isLast && (
+                                  <div className="absolute right-0 inset-y-1 w-1.5 rounded-r-full"
+                                    style={{ backgroundColor: cfg.bg, filter: 'brightness(0.85)' }} />
+                                )}
+                                {/* Today marker line */}
+                                {isToday && (
+                                  <div className="absolute inset-0 flex items-stretch pointer-events-none z-10">
+                                    <div className="w-0.5 bg-red-400 opacity-80 mx-auto" />
+                                  </div>
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
+                  </React.Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
 
-      {/* Legend */}
-      <div className="flex flex-wrap gap-4 text-xs text-gray-600 px-1">
-        {Object.entries(EVENTS).reverse().map(([key, cfg]) => (
-          <div key={key} className="flex items-center gap-1.5">
-            <div
-              className="w-6 h-3 rounded-sm flex-shrink-0"
-              style={{ backgroundColor: cfg.bg }}
-            />
-            <span>{cfg.label}</span>
+        {/* Persistent legend — sits to the right of the scrollable table */}
+        <div className="flex-shrink-0 rounded-xl border border-gray-200 bg-white p-3 flex flex-col gap-2 text-xs text-gray-600 self-stretch">
+          <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Key</div>
+          {Object.entries(EVENTS).reverse().map(([key, cfg]) => (
+            <div key={key} className="flex items-center gap-2">
+              <div className="w-4 h-3 rounded-sm flex-shrink-0" style={{ backgroundColor: cfg.bg }} />
+              <span className="whitespace-nowrap">{cfg.label}</span>
+            </div>
+          ))}
+          <div className="flex items-center gap-2 mt-1">
+            <div className="w-px h-4 bg-red-400 flex-shrink-0 mx-1.5" />
+            <span className="whitespace-nowrap">This month</span>
           </div>
-        ))}
-        <div className="flex items-center gap-1.5">
-          <div className="w-px h-4 bg-red-400 flex-shrink-0" />
-          <span>Current month</span>
         </div>
       </div>
     </div>
