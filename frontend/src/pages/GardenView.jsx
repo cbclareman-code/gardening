@@ -60,7 +60,7 @@ export default function GardenView() {
   const statusIntervalRef = useRef(null);
   // Must Haves + AI mode
   const [mustHavesMode, setMustHavesMode] = useState(false);
-  const [mustHavePlantIds, setMustHavePlantIds] = useState([]);
+  const [mustHavesPerArea, setMustHavesPerArea] = useState({});
   const [mustHaveSearch, setMustHaveSearch] = useState('');
   const [mustHaveCapWarning, setMustHaveCapWarning] = useState(false);
   // Per-area planning flow
@@ -125,6 +125,8 @@ export default function GardenView() {
 
   // Units belonging to the area currently being planned
   const planningAreaUnits = planningAreaName ? (areaGroups[planningAreaName] || []) : [];
+  // Selections for the active area (derived from per-area map)
+  const mustHavePlantIds = mustHavesPerArea[planningAreaName] || [];
 
   // Sun/type compatibility check — returns true if a plant can work in at least one unit of the area
   const isPlantCompatibleWithArea = (plant, areaUnits) => {
@@ -180,13 +182,17 @@ export default function GardenView() {
   const toast = (msg) => { setActionMsg(msg); setTimeout(() => setActionMsg(''), 3000); };
 
   const toggleMustHavePlant = (plantId) => {
-    const selected = mustHavePlantIds.includes(plantId);
-    if (!selected && mustHavePlantIds.length >= MAX_MUST_HAVES) {
+    const current = mustHavesPerArea[planningAreaName] || [];
+    const selected = current.includes(plantId);
+    if (!selected && current.length >= MAX_MUST_HAVES) {
       setMustHaveCapWarning(true);
       setTimeout(() => setMustHaveCapWarning(false), 3000);
       return;
     }
-    setMustHavePlantIds(prev => selected ? prev.filter(i => i !== plantId) : [...prev, plantId]);
+    setMustHavesPerArea(prev => ({
+      ...prev,
+      [planningAreaName]: selected ? current.filter(i => i !== plantId) : [...current, plantId],
+    }));
   };
 
   const togglePlant = async (plant) => {
@@ -225,7 +231,7 @@ export default function GardenView() {
       // Show review panel for this area instead of auto-navigating to timeline
       setPendingReviewAreaName(areaName || areaNames[0] || null);
       setMustHavesMode(false);
-      setMustHavePlantIds([]);
+      setMustHavesPerArea(prev => { const n = { ...prev }; delete n[areaName]; return n; });
       setPlanningAreaName(null);
     } catch (err) {
       console.error('Recommend error:', err);
@@ -538,7 +544,7 @@ export default function GardenView() {
             <div className="card p-6 space-y-4 border-2 border-amber-200">
               <div className="flex items-center gap-3">
                 <button
-                  onClick={() => { setMustHavesMode(false); setMustHavePlantIds([]); setMustHaveSearch(''); }}
+                  onClick={() => { setMustHavesMode(false); setMustHaveSearch(''); }}
                   className="text-sm text-gray-400 hover:text-gray-600 transition-colors"
                 >
                   ← Back
@@ -553,6 +559,32 @@ export default function GardenView() {
                   </span>
                 )}
               </div>
+
+              {/* Area switcher — only shown when garden has multiple areas */}
+              {areaNames.length > 1 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {areaNames.map(name => {
+                    const count = (mustHavesPerArea[name] || []).length;
+                    const active = name === planningAreaName;
+                    return (
+                      <button
+                        key={name}
+                        onClick={() => { setPlanningAreaName(name); setMustHaveSearch(''); }}
+                        className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium border transition-all ${
+                          active
+                            ? 'bg-amber-600 text-white border-amber-600'
+                            : 'bg-white text-gray-600 border-gray-300 hover:border-amber-400 hover:text-amber-700'
+                        }`}
+                      >
+                        {name}
+                        {count > 0 && !active && (
+                          <span className="bg-amber-100 text-amber-700 rounded-full px-1.5 py-px text-[10px] font-bold">{count}</span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
 
               {/* Area constraint summary */}
               {planningAreaUnits.length > 0 && (
@@ -581,7 +613,7 @@ export default function GardenView() {
                       <span key={pid} className="inline-flex items-center gap-1 bg-amber-100 text-amber-800 rounded-full px-3 py-1 text-sm font-medium">
                         {plant.emoji} {plant.name}
                         <button
-                          onClick={() => setMustHavePlantIds(prev => prev.filter(i => i !== pid))}
+                          onClick={() => setMustHavesPerArea(prev => ({ ...prev, [planningAreaName]: (prev[planningAreaName] || []).filter(i => i !== pid) }))}
                           className="ml-0.5 text-amber-600 hover:text-amber-900 leading-none"
                         >×</button>
                       </span>
@@ -655,7 +687,7 @@ export default function GardenView() {
             <div className="card p-6 space-y-4 border-2 border-garden-200">
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => { setPlanningAreaName(null); setMustHavesMode(false); setMustHavePlantIds([]); }}
+                  onClick={() => { setPlanningAreaName(null); setMustHavesMode(false); }}
                   className="text-sm text-gray-400 hover:text-gray-600 transition-colors"
                 >
                   ←

@@ -388,7 +388,7 @@ STRICT RULES — violations will produce a bad plan:
 
 12. BIENNIALS: Plants labeled "biennial" complete their life cycle over two years. In year 1 they grow vegetatively; in year 2 they flower and set seed before dying. For planning: if a biennial (e.g. Parsley, Celery, Leek, Swiss Chard, Beet, Carrot, Parsnip) was grown last year in a unit, note in the summary whether it is likely in its first or second year, since second-year biennials will bolt and should generally be removed unless the gardener wants seeds. When in doubt, treat them as annuals for space/rotation calculations.
 
-For "rationale": write one line per plant or companion group, separated by \n (newline). Format each line as "Plant(s): brief reason". Keep each line short and direct. No paragraph prose.
+For "rationale": write one line per plant or companion group, separated by \n (newline). Format each line as "Plant(s): brief reason". Keep each line under 12 words. No paragraph prose. Keep all "notes" fields in planting_schedule under 15 words.
 
 Return ONLY valid JSON:
 {
@@ -441,9 +441,9 @@ Omit sow_indoors for direct-sown crops. Provide all date fields (null if not app
 
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 16000,
+      max_tokens: 32000,
       messages: [{ role: 'user', content: prompt }],
-    }, { timeout: 300000 }); // 5 min — large must-haves plans need time
+    }, { timeout: 300000, headers: { 'anthropic-beta': 'output-128k-2025-02-19' } }); // 5 min — large must-haves plans need time
 
     // Detect truncation before attempting parse
     if (response.stop_reason === 'max_tokens') {
