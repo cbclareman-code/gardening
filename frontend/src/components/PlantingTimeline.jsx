@@ -200,11 +200,6 @@ export default function PlantingTimeline({ schedule, units, plants }) {
                               <div className="text-xs font-medium text-gray-700 truncate leading-tight">
                                 {item.plant_name}
                               </div>
-                              {item.notes && (
-                                <div className="text-xs text-gray-400 truncate leading-tight mt-0.5">
-                                  {item.notes}
-                                </div>
-                              )}
                             </div>
                           </div>
                         </td>

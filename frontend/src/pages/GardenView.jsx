@@ -190,16 +190,22 @@ export default function GardenView() {
   };
 
   const togglePlant = async (plant) => {
-    const existing = gardenPlants.find(gp => gp.plant_id === plant.id);
-    if (existing) {
-      await api.delete(`/gardens/${id}/plants/${existing.id}`);
-      setGardenPlants(prev => prev.filter(gp => gp.id !== existing.id));
-      toast(`Removed ${plant.name}`);
-    } else {
-      const { data } = await api.post(`/gardens/${id}/plants`, { plant_id: plant.id });
-      const full = allPlants.find(p => p.id === plant.id);
-      setGardenPlants(prev => [...prev, { ...data.garden_plant, ...full, plant_id: plant.id }]);
-      toast(`Added ${plant.name}`);
+    // Normalise the plant id — callers may pass either { id } or { plant_id }
+    const plantId = plant.plant_id ?? plant.id;
+    try {
+      const existing = gardenPlants.find(gp => gp.plant_id === plantId);
+      if (existing) {
+        await api.delete(`/gardens/${id}/plants/${existing.id}`);
+        setGardenPlants(prev => prev.filter(gp => gp.id !== existing.id));
+        toast(`Removed ${plant.name}`);
+      } else {
+        const { data } = await api.post(`/gardens/${id}/plants`, { plant_id: plantId });
+        const full = allPlants.find(p => p.id === plantId);
+        setGardenPlants(prev => [...prev, { ...data.garden_plant, ...full, plant_id: plantId }]);
+        toast(`Added ${plant.name}`);
+      }
+    } catch (err) {
+      toast(err.response?.data?.error || `Failed to update ${plant.name} — try again`);
     }
   };
 
@@ -758,7 +764,7 @@ export default function GardenView() {
             <GardenLayout
               garden={garden}
               plants={gardenPlants}
-              onPlantRemove={(p) => togglePlant({ id: p.plant_id, name: p.name, ...p })}
+              onPlantRemove={(p) => togglePlant(p)}
             />
           </div>
 
