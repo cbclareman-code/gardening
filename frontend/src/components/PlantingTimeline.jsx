@@ -101,6 +101,7 @@ export default function PlantingTimeline({ schedule, units, plants }) {
   const [activeUnit, setActiveUnit] = useState(null);
   const [calendarDone, setCalendarDone] = useState(false);
   const [suppliesOpen, setSuppliesOpen] = useState(false);
+  const [checkedSupplies, setCheckedSupplies] = useState(new Set());
 
   if (!schedule || schedule.length === 0) {
     return (
@@ -138,13 +139,22 @@ export default function PlantingTimeline({ schedule, units, plants }) {
       const d = new Date(item[key] + 'T12:00:00');
       if (d >= today && d <= weekEnd) {
         const unit = units.find(u => u.id === item.unit_id);
-        thisWeekTasks.push({ date: d, label, icon, plant: item.plant_name, unitLabel: unit?.label || item.area_name || 'Garden' });
+        thisWeekTasks.push({ date: d, label, icon, plant: item.plant_name, unitLabel: unit?.label || item.area_name || 'Garden', areaName: unit?.area_name || item.area_name || 'Garden' });
       }
     });
   });
   thisWeekTasks.sort((a, b) => a.date - b.date);
 
   const fmtDate = d => d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+
+  // Group this-week tasks by date then by unit (for new layout)
+  const tasksByDate = {};
+  thisWeekTasks.forEach(task => {
+    const ds = fmtDate(task.date);
+    if (!tasksByDate[ds]) tasksByDate[ds] = {};
+    if (!tasksByDate[ds][task.unitLabel]) tasksByDate[ds][task.unitLabel] = [];
+    tasksByDate[ds][task.unitLabel].push(task);
+  });
 
   // Contextual supplies checklist
   const hasIndoorSowing  = schedule.some(i => i.sow_indoors);
@@ -225,21 +235,31 @@ export default function PlantingTimeline({ schedule, units, plants }) {
 
       {/* This week panel */}
       {thisWeekTasks.length > 0 && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
-          <div className="flex items-center gap-2 mb-2.5">
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 space-y-3">
+          <div className="flex items-center gap-2">
             <span className="text-base">📋</span>
             <span className="text-sm font-semibold text-amber-900">Coming up this week</span>
           </div>
-          <div className="space-y-1.5">
-            {thisWeekTasks.map((task, i) => (
-              <div key={i} className="flex items-center gap-3 text-sm">
-                <span className="text-base leading-none w-5 flex-shrink-0 text-center">{task.icon}</span>
-                <span className="text-amber-700 font-medium w-28 flex-shrink-0">{fmtDate(task.date)}</span>
-                <span className="text-gray-700">{task.label} <span className="font-medium">{task.plant}</span></span>
-                <span className="text-gray-400 text-xs">— {task.unitLabel}</span>
+          {Object.entries(tasksByDate).map(([dateStr, unitMap]) => (
+            <div key={dateStr} className="flex gap-4 items-start">
+              <div className="w-24 flex-shrink-0 pt-0.5">
+                <span className="text-xs font-semibold text-amber-800">{dateStr}</span>
               </div>
-            ))}
-          </div>
+              <div className="flex flex-wrap gap-x-6 gap-y-2 flex-1">
+                {Object.entries(unitMap).map(([unitLabel, tasks]) => (
+                  <div key={unitLabel} className="space-y-1 min-w-0">
+                    <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{unitLabel}</div>
+                    {tasks.map((task, i) => (
+                      <div key={i} className="flex items-center gap-1.5 text-sm text-gray-700">
+                        <span className="text-base leading-none flex-shrink-0">{task.icon}</span>
+                        <span>{task.label} <span className="font-medium">{task.plant}</span></span>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       )}
 

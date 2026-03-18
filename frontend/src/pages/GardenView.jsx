@@ -529,9 +529,9 @@ export default function GardenView() {
                     </div>
                     <button
                       onClick={() => { setPlanningAreaName(pendingReviewAreaName); setPendingReviewAreaName(null); }}
-                      className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                      className="btn-secondary text-sm px-4 py-2.5"
                     >
-                      ↺ Not happy with this area? Re-plan it
+                      ↺ Re-plan this area
                     </button>
                   </div>
                 );
